@@ -13,18 +13,22 @@ aether-search 是基于 [FastMCP](https://github.com/jlowin/fastmcp) 的 MCP 服
 - **Grok 通道（主）**：调用任意 OpenAI 兼容端点（xAI 官方 / OpenRouter / 自建代理）做 LLM 原生网络搜索，输出带内联引用的 Markdown 答案。
 - **Aux 通道（辅）**：用一个 OpenAI 兼容 LLM 改写查询，并发扇出到 9 个搜索后端，结果经 RRF 融合，可选 LLM 摘要。
 
-两通道并行执行。Grok 答案中的引用 URL 与 aux 索引交叉印证，未印证的做存活探测，标记死链与潜在幻觉。
+两通道并行执行；两通道返回后，核验三任务并发——Grok 答案与 Aux 摘要的引用走「Aux 印证 + 存活探测」，Aux 展示链接走死链探测。即任何 LLM 文字都核验引用、任何对外链接都探测死链。
 
 ```
 Client ──MCP──► aether-search
-                 ├─ grok ──► OpenAI 兼容端点 ─► 带引用答案
-                 │              │
-                 │              └─► 引用核验（aux 印证 / HEAD 探测）
-                 │
-                 └─ aux
-                     ├─ LLM 改写 → 查询变体
-                     ├─ 并发 fan-out → Parallel · Brave · Exa · Serper · Linkup · You.com · Sonar · Tavily · Firecrawl
-                     └─ RRF 融合 →（可选）LLM 摘要
+
+  阶段1 · 两通道并行
+    ├─ grok ──► OpenAI 兼容端点 ─► 带引用答案
+    └─ aux
+        ├─ LLM 改写 → 查询变体
+        ├─ 并发 fan-out → Parallel · Brave · Exa · Serper · Linkup · You.com · Sonar · Tavily · Firecrawl
+        └─ RRF 融合 →（可选）LLM 摘要
+
+  阶段2 · 核验三任务并发（两通道返回后）
+        ├─ verify(grok 引用)    → Tier 0 Aux 印证 + Tier 1 存活探测
+        ├─ verify(digest 引用)  → Tier 0 Aux 印证 + Tier 1 存活探测
+        └─ probe(aux 链接)      → Tier 1 死链探测
 ```
 
 ### 功能特性
@@ -33,7 +37,7 @@ Client ──MCP──► aether-search
 - **9 个高质量搜索后端**（Parallel / Brave / Exa 为第一梯队）：配哪个启用哪个，未配置静默跳过；Aux 未配置任何后端时自动退化为仅 Grok 通道，不强行兜底。
 - **查询改写**：LLM 生成多角度子查询，`economy` / `full` 两种扇出策略。
 - **RRF 融合**：跨后端按 Reciprocal Rank Fusion 去重排序。
-- **引用核验**：aux 索引印证（免费）+ HEAD/Range-GET 存活探测，识别 404/410 幻觉链。
+- **全并发核验**：两通道返回后，核验三任务并发——Grok 答案引用 + Aux 摘要引用走「Aux 印证 + 存活探测」，Aux 展示链接走死链探测；任何 LLM 文字都验引用、任何对外链接都探死链。Grok 失败时 Aux 链接仍独立核验，核验链不断。
 - **鲁棒性**：SSE 流式 + 非流式兜底解析、`Retry-After` 指数退避、整通道超时。
 
 ## 二、安装
@@ -63,7 +67,7 @@ uv pip install -e .
 |---|---|
 | `AETHER_GROK_API_URL` | 端点，如 `https://api.x.ai/v1`、`https://openrouter.ai/api/v1` |
 | `AETHER_GROK_API_KEY` | API key |
-| `AETHER_GROK_MODEL` | 模型，默认 `grok-4`（OpenRouter 自动追加 `:online`） |
+| `AETHER_GROK_MODEL` | 模型，默认 `grok-4`；推荐 `grok-4.5`（更新且更便宜，见 `docs/BACKENDS.md`）。OpenRouter 自动追加 `:online` |
 | `AETHER_GROK_SEARCH_MODE` | xAI Live Search：`auto` / `on` / `off` / `none`，留空在 api.x.ai 上为 `auto`，其他端点省略该字段 |
 
 ### Aux 查询 agent LLM（OpenAI 兼容）
@@ -78,6 +82,8 @@ uv pip install -e .
 
 ### 搜索后端
 
+**各后端的申请入口、免费额度与收费标准见 [`docs/BACKENDS.md`](docs/BACKENDS.md)（2026-07-27 官方一手数据）。**
+
 `AETHER_<NAME>_API_KEY` + 可选 `AETHER_<NAME>_API_URL`，NAME 取值：`PARALLEL` / `BRAVE` / `EXA` / `SERPER` / `LINKUP` / `YOUCOM` / `SONAR` / `TAVILY` / `FIRECRAWL`。URL 均有官方默认值，走代理时才需覆写。未配置任何后端 key 时 Aux 通道不启用，仅走 Grok。
 
 > Tavily / Firecrawl：若同环境的 `grok-search` 已在消耗其额度，此处留空即可。
@@ -90,7 +96,7 @@ uv pip install -e .
 | `AETHER_MAX_VARIANTS` | `3` | 含原查询的子查询数 |
 | `AETHER_TOP_K` | `10` | 单后端单次返回条数 |
 | `AETHER_MAX_CONCURRENCY` | `8` | 并发扇出上限 |
-| `AETHER_VERIFY` | `true` | 是否核验 Grok 引用 URL |
+| `AETHER_VERIFY` | `true` | 核验总开关：Grok 答案 + Aux 摘要引用做印证/探测，Aux 展示链接做死链探测 |
 
 ## 四、接入 MCP 客户端
 
@@ -105,7 +111,7 @@ MCP stdio 配置通用 JSON 格式如下（所有 stdio 客户端一致，按需
       "env": {
         "AETHER_GROK_API_URL": "https://api.x.ai/v1",
         "AETHER_GROK_API_KEY": "sk-...",
-        "AETHER_GROK_MODEL": "grok-4",
+        "AETHER_GROK_MODEL": "grok-4.5",
         "AETHER_LLM_API_BASE": "https://api.openai.com/v1",
         "AETHER_LLM_API_KEY": "sk-...",
         "AETHER_LLM_MODEL": "gpt-4o-mini",
@@ -154,13 +160,13 @@ MCP stdio 配置通用 JSON 格式如下（所有 stdio 客户端一致，按需
 
 | mode | 行为 | 适用场景 |
 |---|---|---|
-| `full` | Grok + Aux 并行：Grok 给综合答案，Aux 融合补充原始链接，并对 Grok 引用做核验 | 默认，最大覆盖与可信度 |
+| `full` | Grok + Aux 并行：Grok 给综合答案，Aux 融合补充原始链接（含可选摘要）；两通道返回后并发核验——双方引用 + Aux 链接全覆盖 | 默认，最大覆盖与可信度 |
 | `grok` | 仅 Grok 通道，返回带引用的 AI 综合答案 | 只需结论、省 token / 省 API 调用 |
-| `aux` | 仅 Aux 通道：LLM 改写 → 多后端扇出 → RRF 融合，返回原始链接列表 | 需要可点击的来源列表、Grok 不可用或额度吃紧 |
+| `aux` | 仅 Aux 通道：LLM 改写 → 多后端扇出 → RRF 融合，返回带 ✓⚠ 核验标记的链接列表（可选摘要） | 需要可点击的来源列表、Grok 不可用或额度吃紧 |
 
 **查询改写**：Aux 通道中 LLM 把原查询拆为最多 `AETHER_MAX_VARIANTS` 个不同角度的子查询（同义词 / 子主题 / 不同范围），保留原查询语言，再并发投递到各后端。
 
-**返回内容**：Grok 带引用答案 + 引用核验标记（✓ 印证或存活 / ⚠ 死链，可能幻觉 / ? 不可达或被反爬）+ Aux 融合结果（可选 LLM 摘要）+ 通道状态行（耗时、命中数、各通道成败）。Grok 失败时 Aux 自动提升为主体。
+**返回内容**（两通道独立 + 各自核验标记，供主 agent 对比）：Grok 带引用答案 + 引用核验（✓ 印证/存活、⚠ 死链沉底、? 不可达）；Aux 融合结果，每条链接带 ✓⚠ 存活标记，可选 LLM 摘要（其引用同样核验）；通道状态行（耗时、命中数、各通道成败、digest）。Grok 失败时 Aux 提升为主体且链接仍核验。
 
 ### `get_config()`
 
@@ -168,10 +174,10 @@ MCP stdio 配置通用 JSON 格式如下（所有 stdio 客户端一致，按需
 
 ## 六、工作原理
 
-1. **并行执行**：grok / aux 作为两个 `asyncio` 任务并行，各有整通道超时（默认 grok 60s，aux 25s）。
+1. **并行执行**：grok / aux 作为两个 `asyncio` 任务并行，Aux 流水线末尾串接可选 digest，各受整通道超时约束（默认 grok 60s，aux 25s）。
 2. **Aux 流水线**：LLM 改写 → `_assigned` 按后端类型分配变体 → 各后端 `search_all` 并发扇出（Parallel 一次吃全部变体）→ RRF 融合。
 3. **降级链**：Grok 失败 → aux 提升为主体；aux 无任何后端 → 仅 grok；两者皆不可用 → 报错。
-4. **核验分层**：Tier 0 aux 索引印证（跳过探测）；Tier 1 HEAD 探测，405/501 回退 Range-GET，404/410 判死链，其余不可达判为 unverified（反爬不等于不存在）。
+4. **核验全覆盖 + 全并发**：阶段 1 两通道并行；阶段 2 三任务并发——`verify_urls`（Tier 0 Aux 印证 + Tier 1 探测）针对 **Grok 答案与 Aux digest 的引用**，`probe_urls`（仅 Tier 1）针对 **Aux 展示链接**。即任何 LLM 文字都核验引用、任何对外链接都探测死链；`mode=grok` 时 Grok 引用也走 Tier 1 探测。404/410 判死链并沉底，405/501 回退 Range-GET。Grok 失败时 Aux 链接仍独立探测，核验链不断。
 
 ## 七、验证
 

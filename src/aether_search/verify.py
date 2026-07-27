@@ -1,8 +1,9 @@
-"""Verification of grok-cited URLs: cross-corroboration + liveness probe.
+"""URL verification: cross-corroboration + liveness probe.
 
-Tier 0: URL also present in aux index results -> corroborated (free).
-Tier 1: HEAD probe (Range-GET fallback on 405/501), status only, no body.
-404/410 -> dead; 2xx/3xx -> alive; anything else -> unverified (anti-bot != nonexistent).
+verify_urls — Tier 0 (corroboration against the aux index) + Tier 1 probe. Used for
+  LLM-generated citations (grok answer, aux digest): these can hallucinate URLs.
+probe_urls — Tier 1 only. Used for any URL surfaced to the user (aux result links):
+  search engines don't hallucinate URLs, but pages can be dead (404/410) or blocked.
 """
 
 import asyncio
@@ -17,6 +18,9 @@ _URL_RE = re.compile(r'https?://[^\s<>"\'`，。、；：！？》）】\)\]]+')
 
 ALIVE, DEAD, UNVERIFIED, CORROBORATED = "alive", "dead", "unverified", "corroborated"
 _MARK = {ALIVE: "✓", DEAD: "⚠", UNVERIFIED: "?", CORROBORATED: "✓"}
+
+_PROBE_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; aether-search/0.1)"}
+_DETAIL = {ALIVE: "alive", DEAD: "HTTP 404/410 — possibly hallucinated", UNVERIFIED: "unreachable/blocked"}
 
 
 def extract_urls(text: str) -> list[str]:
@@ -48,8 +52,19 @@ async def _probe(client: httpx.AsyncClient, url: str) -> str:
         return UNVERIFIED
 
 
+async def probe_urls(urls: list[str]) -> dict[str, tuple[str, str]]:
+    """Tier 1 only: liveness probe for URLs surfaced to the user."""
+    if not urls:
+        return {}
+    if not settings.verify:
+        return {u: (UNVERIFIED, "verification disabled") for u in urls}
+    async with httpx.AsyncClient(timeout=settings.verify_timeout, headers=_PROBE_HEADERS) as client:
+        statuses = await asyncio.gather(*(_probe(client, u) for u in urls))
+    return {u: (s, _DETAIL[s]) for u, s in zip(urls, statuses)}
+
+
 async def verify_urls(grok_urls: list[str], aux_urls: list[str]) -> dict[str, tuple[str, str]]:
-    """url -> (status, detail). Aux-corroborated URLs skip probing."""
+    """Tier 0 (corroboration against aux index) + Tier 1 probe, for LLM-cited URLs."""
     aux_norm = {_norm(u) for u in aux_urls}
     out: dict[str, tuple[str, str]] = {}
     to_probe = []
@@ -58,19 +73,7 @@ async def verify_urls(grok_urls: list[str], aux_urls: list[str]) -> dict[str, tu
             out[url] = (CORROBORATED, "corroborated by aux index")
         else:
             to_probe.append(url)
-
-    if to_probe and settings.verify:
-        async with httpx.AsyncClient(
-            timeout=settings.verify_timeout,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; aether-search/0.1)"},
-        ) as client:
-            statuses = await asyncio.gather(*(_probe(client, u) for u in to_probe))
-        detail = {ALIVE: "alive", DEAD: "HTTP 404/410 — possibly hallucinated", UNVERIFIED: "unreachable/blocked"}
-        for url, status in zip(to_probe, statuses):
-            out[url] = (status, detail[status])
-    else:
-        for url in to_probe:
-            out[url] = (UNVERIFIED, "verification disabled")
+    out.update(await probe_urls(to_probe))
     return out
 
 
