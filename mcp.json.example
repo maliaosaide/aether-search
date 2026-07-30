@@ -1,0 +1,49 @@
+{
+  "mcpServers": {
+    "aether-search": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/maliaosaide/aether-search",
+        "aether-search"
+      ],
+      "env": {
+        "AETHER_GROK_API_URL": "https://api.x.ai/v1",
+        "AETHER_GROK_API_KEY": "xai-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "AETHER_GROK_MODEL": "grok-4.5",
+        "AETHER_GROK_SEARCH_MODE": "",
+        "AETHER_GROK_ENDPOINTS": "",
+        "AETHER_GROK_FAILOVER": "sequential",
+        "AETHER_GROK_TIMEOUT": "60",
+
+        "AETHER_LLM_API_BASE": "https://api.openai.com/v1",
+        "AETHER_LLM_API_KEY": "sk-xxxxxxxxxxxxxxxxxxxxxxxx",
+        "AETHER_LLM_MODEL": "gpt-4o-mini",
+        "AETHER_LLM_REWRITE": "true",
+
+        "AETHER_PARALLEL_API_KEY": "parallel-xxxxxxxxxxxxxxxx",
+        "AETHER_BRAVE_API_KEY": "BSAxxxxxxxxxxxxxxxxxxxxxxxx",
+        "AETHER_EXA_API_KEY": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+        "AETHER_SERPER_API_KEY": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "AETHER_LINKUP_API_KEY": "lk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "AETHER_YOUCOM_API_KEY": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+        "AETHER_SONAR_API_KEY": "pplx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "AETHER_TAVILY_API_KEY": "tvly-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "AETHER_FIRECRAWL_API_KEY": "fc-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+
+        "AETHER_FANOUT": "economy",
+        "AETHER_MAX_VARIANTS": "3",
+        "AETHER_TOP_K": "10",
+        "AETHER_MAX_CONCURRENCY": "8",
+        "AETHER_VERIFY": "true",
+
+        "AETHER_AGENT_MAX_STEPS": "6",
+        "AETHER_AGENT_TIMEOUT": "90",
+        "AETHER_FETCH_TIMEOUT": "60",
+        "AETHER_SCRAPE_RETRY": "3",
+        "AETHER_SOURCES_CACHE_SIZE": "256",
+        "AETHER_FALLBACK_BACKENDS": "sonar,linkup"
+      }
+    }
+  }
+}

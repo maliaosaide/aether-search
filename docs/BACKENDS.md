@@ -12,15 +12,15 @@
 | 0 | **xAI Grok** | 主通道（AI 答案） | 无（按量） | grok-4.5：$2/1M 入 + $6/1M 出；Live Search $0.025/次起 | `console.x.ai` | `AETHER_GROK_API_KEY` 等 |
 | 1 | **You.com** | Aux | **$100 credit（≈20,000 次，无需信用卡）** | $5/1k calls | `you.com/platform` | `AETHER_YOUCOM_API_KEY` |
 | 2 | **Parallel** | Aux（multi_query） | 5,000 次/月 + $5 月度额度 | $1/1k requests | `platform.parallel.ai` | `AETHER_PARALLEL_API_KEY` |
-| 3 | **Linkup** | Aux | 4,000 次查询 | $0.005–0.006/次 | `linkup.so` | `AETHER_LINKUP_API_KEY` |
+| 3 | **Linkup** | Aux | 4,000 次（**一次性**） | $0.005–0.006/次 | `linkup.so` | `AETHER_LINKUP_API_KEY` |
 | 4 | **Serper** | Aux | 2,500 次（无需信用卡，6 个月有效） | $1/1k（Starter $50/50k） | `serper.dev` | `AETHER_SERPER_API_KEY` |
 | 5 | **Tavily** | Aux | 1,000 credits/月（无需信用卡） | $0.008/credit | `app.tavily.com` | `AETHER_TAVILY_API_KEY` |
 | 6 | **Firecrawl** | Aux | 1,000 credits/月（无需信用卡） | ~$0.00083/credit（Standard $83/月） | `firecrawl.dev` | `AETHER_FIRECRAWL_API_KEY` |
 | 7 | **Brave** | Aux | $5 月度额度（≈1,000 次，**需信用卡反欺诈**） | $5/1k requests | `api.search.brave.com` | `AETHER_BRAVE_API_KEY` |
-| 8 | **Exa** | Aux | 注册 credit + Startup/Education $1,000 grant | $7/1k Search | `dashboard.exa.ai` | `AETHER_EXA_API_KEY` |
+| 8 | **Exa** | Aux | **$10 credit/月**（可再生）+ 注册 $20 + Startup/Education $1,000 grant | $7/1k Search | `dashboard.exa.ai` | `AETHER_EXA_API_KEY` |
 | 9 | **Perplexity Sonar** | Aux | **无免费层（需信用卡）** | Sonar：$1/1M 入 + $1/1M 出 + search $5/1k | `perplexity.ai`（Settings → API） | `AETHER_SONAR_API_KEY` |
 
-> **免费额度排名**（建议优先配置顺序）：You.com $100 ≫ Parallel 5,000/月 > Linkup 4,000 > Serper 2,500 > Tavily 1,000/月 ≈ Firecrawl 1,000/月 ≈ Brave $5/月 > Exa（grant）> Sonar（无）。
+> **免费额度排名**（建议优先配置顺序）：You.com $100 ≫ Parallel 5,000/月 > Linkup 4,000（一次性）> Serper 2,500 > Exa $10/月（≈1.4k Search）> Tavily 1,000/月 ≈ Firecrawl 1,000/月 ≈ Brave $5/月 > Sonar（无）。
 
 ---
 
@@ -57,7 +57,7 @@ aether-search 的**主检索通道**，调用 Grok 做 LLM 原生网络搜索，
 - **配置**：
   ```bash
   AETHER_YOUCOM_API_KEY=your_ydc_key
-  # AETHER_YOUCOM_API_URL=https://api.ydc-index.io/v1   # 默认值，无需改
+  # AETHER_YOUCOM_API_URL=https://api.you.com/v1   # 默认值，无需改
   ```
 - **来源**：[you.com/pricing](https://you.com/pricing)、[you.com/docs](https://docs.you.com)
 
@@ -83,7 +83,7 @@ aether-search 里 Parallel 是 `multi_query` 后端——一次调用吃掉 AuxA
 ### 3. Linkup
 
 - **定位**：AI 原生搜索，Verified SimpleQA 92% F-score，亚秒级
-- **免费额度**：**4,000 次查询免费**
+- **免费额度**：**4,000 次查询**（一次性,用完转按量付费;官方定价页未标月度,2026-07-30 确认）
 - **价格**：Search $0.005–0.006/次（Fast/Standard/Deep 三档）；Fetch $0.001–0.005/次；Research（异步）$0.25–2.50/次；Startup 可申请 $5,000 credit
 - **申请**：访问 `linkup.so` → 登录 → dashboard 取 key
 - **配置**：
@@ -166,7 +166,7 @@ aether-search 里 Parallel 是 `multi_query` 后端——一次调用吃掉 AuxA
 ### 8. Exa
 
 - **定位**：神经/语义搜索，质量分 3.82/5 全场最高（AIMultiple）
-- **免费额度**：注册赠送 credit；Startup / Education 计划 **$1,000 免费 credit**；历史 1,000 次/月，2026-03 起每次 search 前 10 results 含 full text 免费（**以 dashboard 实际显示为准**）
+- **免费额度**：**$10 credit/月**（可再生，每月自动到账）+ 注册 **$20** 一次性 credit；Startup / Education 可申请 **$1,000 grant**。credit 池跨 endpoint 共用、按消耗扣（2026-07-30 官方定价页确认，原「1,000 次/月」已改为 credit 制）
 - **价格（per 1k requests）**：Search **$7**（含 10 results，每加 1 result +$1/1k）；Deep Search $12；Deep-Reasoning $15；Contents $1/1k pages；Answer $5
 - **申请**：访问 `dashboard.exa.ai` 注册 → 取 API Key
 - **配置**：

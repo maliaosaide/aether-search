@@ -9,3 +9,12 @@ build/
 .env
 .venv/
 venv/
+
+# uv — no lockfile committed (pyproject is the source of truth)
+uv.lock
+
+# Real MCP config with secrets (keep mcp.json.example tracked instead)
+.mcp.json
+
+# Internal design doc (not published)
+docs/aether-search增强方案.md

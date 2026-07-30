@@ -1,12 +1,13 @@
 [project]
 name = "aether-search"
-version = "0.1.0"
+version = "0.2.0"
 description = "Dual-channel search MCP: Grok primary + LLM-orchestrated multi-backend auxiliary retrieval"
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=2.0.0",
     "httpx>=0.27.0",
     "openai>=1.40.0",
+    "pydantic>=2.1.0",
     "pydantic-settings>=2.1.0",
     "tenacity>=8.2.0",
 ]

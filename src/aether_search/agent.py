@@ -1,4 +1,8 @@
-"""Aux channel orchestration: LLM rewrite -> concurrent fan-out -> RRF fusion."""
+"""Aux retrieval: LLM rewrite -> concurrent fan-out -> RRF fusion.
+
+Backends split into primary (default fan-out) and fallback (search_deep only) via
+AETHER_FALLBACK_BACKENDS. run_queries/run_fallback share _fanout; run = rewrite + run_queries.
+"""
 
 import asyncio
 
@@ -25,6 +29,9 @@ class AuxAgent:
     def __init__(self):
         self.llm = LLMClient()
         self.connectors = active_connectors()
+        fb = {n.strip() for n in settings.fallback_backends.split(",") if n.strip()}
+        self.primary_connectors = [c for c in self.connectors if c.name not in fb]
+        self.fallback_connectors = [c for c in self.connectors if c.name in fb]
 
     async def rewrite(self, query: str) -> list[str]:
         """Return [query, *variants]; degrade to [query] on any failure."""
@@ -47,13 +54,11 @@ class AuxAgent:
                 break
         return variants
 
-    def _assigned(self, queries: list[str], connector) -> list[str]:
-        """Which rewritten queries a connector should run.
-        multi_query / full fanout: every variant. economy: the original query,
-        with the remaining variants round-robin'd across single-query backends."""
+    def _assigned(self, queries: list[str], connector, group: list) -> list[str]:
+        """Which rewritten queries a connector should run, within the given group."""
         if connector.multi_query or settings.fanout == "full":
             return queries
-        single = [c for c in self.connectors if not c.multi_query]
+        single = [c for c in group if not c.multi_query]
         if len(queries) == 1 or not single:
             return queries[:1]
         idx = single.index(connector)
@@ -63,24 +68,19 @@ class AuxAgent:
                 qs.append(v)
         return qs
 
-    async def run(self, query: str) -> tuple[list[Source], dict]:
-        """Returns (fused sources, stats)."""
-        stats: dict = {"connectors": [c.name for c in self.connectors], "variants": [], "errors": []}
-        if not self.connectors:
+    async def _fanout(self, queries: list[str], connectors: list) -> tuple[list[Source], dict]:
+        """Concurrent fan-out + RRF over a given connector group. Returns (fused, stats)."""
+        stats: dict = {"connectors": [c.name for c in connectors], "variants": queries, "errors": []}
+        if not connectors:
             return [], stats
-
-        queries = await self.rewrite(query)
-        stats["variants"] = queries
 
         sem = asyncio.Semaphore(settings.max_concurrency)
 
         async def bounded(connector):
             async with sem:
-                return await connector.search_all(self._assigned(queries, connector), settings.top_k)
+                return await connector.search_all(self._assigned(queries, connector, connectors), settings.top_k)
 
-        results = await asyncio.gather(
-            *(bounded(c) for c in self.connectors), return_exceptions=True
-        )
+        results = await asyncio.gather(*(bounded(c) for c in connectors), return_exceptions=True)
 
         lists: list[list[Source]] = []
         for r in results:
@@ -97,13 +97,15 @@ class AuxAgent:
         stats["hits"] = len(fused)
         return fused, stats
 
-    async def digest(self, query: str, sources: list[Source]) -> str:
-        if not (settings.llm_digest and self.llm.is_configured() and sources):
-            return ""
-        numbered = "\n".join(
-            f"[{i}] {s.title} — {s.url}\n{s.content[:300]}" for i, s in enumerate(sources[:10], 1)
-        )
-        try:
-            return await self.llm.complete(DIGEST_SYSTEM, f"Query: {query}\n\n{numbered}", max_tokens=400)
-        except Exception:
-            return ""
+    async def run_queries(self, queries: list[str]) -> tuple[list[Source], dict]:
+        """Primary-layer fan-out + RRF, skipping rewrite."""
+        return await self._fanout(queries, self.primary_connectors)
+
+    async def run_fallback(self, queries: list[str]) -> tuple[list[Source], dict]:
+        """Fallback-layer fan-out + RRF (for search_deep)."""
+        return await self._fanout(queries, self.fallback_connectors)
+
+    async def run(self, query: str) -> tuple[list[Source], dict]:
+        """Returns (fused sources, stats). Primary layer with rewrite."""
+        queries = await self.rewrite(query)
+        return await self.run_queries(queries)

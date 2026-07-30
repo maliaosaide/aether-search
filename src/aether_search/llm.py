@@ -1,9 +1,22 @@
-"""OpenAI-compatible client for the aux query agent."""
+"""OpenAI-compatible client for the aux/agent LLM."""
+
+from dataclasses import dataclass
 
 import httpx
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, BadRequestError
 
 from .config import settings
+
+
+class ToolsNotSupported(RuntimeError):
+    """Endpoint rejects the tools parameter (function calling unsupported)."""
+
+
+@dataclass
+class ToolCallResult:
+    content: str
+    tool_calls: list
+    raw: dict  # assistant message dict, appendable back into messages
 
 
 class LLMClient:
@@ -29,3 +42,23 @@ class LLMClient:
             max_tokens=max_tokens,
         )
         return response.choices[0].message.content or ""
+
+    async def complete_with_tools(
+        self, messages: list[dict], tools: list[dict],
+        tool_choice: str = "auto", max_tokens: int = 2048,
+    ) -> ToolCallResult:
+        try:
+            resp = await self._client.chat.completions.create(
+                model=self.model, messages=messages, tools=tools,
+                tool_choice=tool_choice, temperature=0.3, max_tokens=max_tokens,
+            )
+        except BadRequestError as e:
+            low = str(e).lower()
+            if any(k in low for k in ("tool", "function", "unsupported")):
+                raise ToolsNotSupported(str(e)) from e
+            raise
+        m = resp.choices[0].message
+        raw = {"role": "assistant", "content": m.content}
+        if m.tool_calls:
+            raw["tool_calls"] = m.tool_calls
+        return ToolCallResult(m.content or "", m.tool_calls or [], raw)

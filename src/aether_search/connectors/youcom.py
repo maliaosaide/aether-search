@@ -1,8 +1,8 @@
 """You.com Web Search connector.
 
-Request format verified against you.com/docs/capabilities/web-search-api-for-ai-agents
-(fetched 2026-07-26): GET {base}/search with X-API-Key header, params
-{query, count}. Response: results.web[].{title,url,description,snippets[]}.
+Endpoint https://api.you.com/v1 (updated 2026-07-30 from api.ydc-index.io).
+GET {base}/search with X-API-Key header, params {query, count}.
+Response: results.web[].{title,url,description,snippets[]}.
 """
 
 import httpx

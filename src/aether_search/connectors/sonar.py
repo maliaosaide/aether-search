@@ -30,7 +30,7 @@ class SonarConnector(Connector):
                     json={
                         "model": settings.sonar_model,
                         "messages": [{"role": "user", "content": query}],
-                        "max_tokens": 1,
+                        "max_tokens": 200,
                         "web_search_options": {"search_context_size": "low"},
                     },
                 )
