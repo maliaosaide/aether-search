@@ -1,8 +1,8 @@
 """Perplexity Sonar connector — LLM search whose search_results we harvest as sources.
 
-Request format verified against docs.perplexity.ai/api-reference/chat-completions-post
-(fetched 2026-07-26): POST {base}/chat/completions, Bearer auth, OpenAI-compatible
-body. Response carries search_results[].{title,url,snippet,date} alongside the answer.
+Live API rejects max_tokens/web_search_options (2026-09-09): send only model+messages.
+POST {base}/chat/completions, Bearer auth, OpenAI-compatible body.
+Response carries search_results[].{title,url,snippet,date} alongside the answer.
 """
 
 import httpx
@@ -30,8 +30,6 @@ class SonarConnector(Connector):
                     json={
                         "model": settings.sonar_model,
                         "messages": [{"role": "user", "content": query}],
-                        "max_tokens": 200,
-                        "web_search_options": {"search_context_size": "low"},
                     },
                 )
                 resp.raise_for_status()
