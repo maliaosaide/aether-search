@@ -13,15 +13,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # Grok channel (primary). Any OpenAI-compatible endpoint: https://api.x.ai/v1,
-    # https://openrouter.ai/api/v1, or a self-hosted proxy. Just URL + key.
-    grok_api_url: str = Field(default="", description="OpenAI-compatible endpoint, e.g. https://api.x.ai/v1")
+    # Grok：官方 SDK 处理 Chat Completions 或 Responses，CPA 复用兼容协议。
+    grok_api_url: str = Field(default="", description="包含版本前缀的 base URL，例如 https://api.x.ai/v1")
     grok_api_key: str = Field(default="")
     grok_model: str = Field(default="grok-4")
-    grok_search_mode: str = Field(default="", description="xAI Live Search: auto|on|off|none. Empty = auto on api.x.ai, omitted elsewhere (strict gateways may reject the extra field)")
-    grok_endpoints: str = Field(default="", description='JSON [{"url","key","model?","label?"}]; overrides grok_api_url/key. Kept as str, parsed in channels (avoid config<->channels import cycle)')
-    grok_failover: str = Field(default="sequential", description="sequential (one-by-one, empty body counts as fail) | race (all endpoints, first non-empty wins)")
-    grok_timeout: float = Field(default=60.0, description="Whole-grok-channel deadline across all endpoints (seconds)")
+    grok_provider: str = Field(default="auto", description="auto|openai|xai|cpa；auto 仅按 api.x.ai 精确主机名识别 xAI")
+    grok_api_format: str = Field(default="auto", description="auto|chat_completions|responses；auto 时 xAI 使用 Responses，其他使用 Chat")
+    grok_search_mode: str = Field(default="", description="空值或 auto：xAI 请求原生搜索，其他交由网关；on 显式请求 Responses 搜索工具；off/none 不携带工具")
+    grok_endpoints: str = Field(default="", description='JSON 数组，每项 url,key,model?,label?,provider?,api_format?,search_mode?；覆盖单端点配置')
+    grok_failover: str = Field(default="sequential", description="sequential 主备切换；race 有限并发竞速，首个完整非空回答胜出")
+    grok_timeout: float = Field(default=60.0, description="整个 Grok 调用的总时限，包含所有端点和重试，单位秒")
+    grok_request_timeout: float = Field(default=45.0, description="单次请求时限，不超过总预算剩余时间，单位秒")
+    grok_max_concurrency: int = Field(default=2, description="race 模式的最大并发端点数")
 
     # Aux query-agent LLM (any OpenAI-compatible endpoint)
     llm_api_base: str = Field(default="")

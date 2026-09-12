@@ -1,0 +1,195 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1608" role="img" aria-labelledby="ttl dsc">
+  <title id="ttl">aether-search MCP 双通道搜索架构图</title>
+  <desc id="dsc">MCP 客户端经 stdio 连接 FastMCP 入口；一次 search 调用对已配置且可用的通道并行执行：Grok 通道（OpenAI 兼容、xAI 官方或 CPA 端点，经多端点主备或有限竞速调度，由 OpenAI SDK 的 Chat Completions 或 Responses 协议请求，产出带引用的模型答案）与 Agent 通道（9 个搜索后端扇出加 RRF 融合得到证据池，配置 Aux LLM 时进入工具调用循环产出带引用答案，期间可经 fetch_page 按需抓取页面（Tavily Extract 到 Firecrawl Scrape），未配置时直接返回证据链接）。两路结果汇合后做 URL 重合检查与链接可达性核验，再装配输出（Grok 优先、Agent 接替、证据兜底），信源写入会话缓存，返回 Markdown 答案与 get_sources 会话句柄。</desc>
+  <defs>
+    <style>
+      text{font-family:system-ui,'Noto Sans CJK SC','Noto Sans SC','Microsoft YaHei',sans-serif}
+      .h1{font-size:38px;font-weight:700;fill:#0b0b0b}
+      .sub{font-size:20px;fill:#52514e}
+      .laneT{font-size:26px;font-weight:700;fill:#0b0b0b}
+      .cardT{font-size:22px;font-weight:600;fill:#0b0b0b}
+      .stepT{font-size:20px;font-weight:600;fill:#0b0b0b}
+      .body{font-size:18px;fill:#0b0b0b}
+      .small{font-size:18px;fill:#52514e}
+      .tiny{font-size:17px;fill:#52514e}
+      .chipT{font-size:18px;fill:#0b0b0b}
+      .tagT{font-size:16px;fill:#52514e}
+      .pillT{font-size:21px;font-weight:700;fill:#0b0b0b}
+      .m{text-anchor:middle}
+      .lane{fill:#ffffff;stroke:#e7e4df;stroke-width:1.5;filter:url(#shadow)}
+      .card{fill:#ffffff;stroke:#e7e4df;stroke-width:1.5;filter:url(#shadow)}
+      .inner{fill:#faf9f7;stroke:#e7e4df;stroke-width:1}
+      .chip{fill:#ffffff;stroke:#d9d5cf;stroke-width:1}
+      .tag{fill:#f4f2ef}
+      .flow{fill:none;stroke:#a7a49e;stroke-width:2;marker-end:url(#ah)}
+      .flowO{fill:none;stroke:#eb6834;stroke-width:2;marker-end:url(#ahO)}
+      .sep{fill:none;stroke:#d9d5cf;stroke-width:1.5;stroke-dasharray:5 4}
+    </style>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="5" flood-color="#0b0b0b" flood-opacity="0.06"/>
+    </filter>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#a7a49e"/>
+    </marker>
+    <marker id="ahO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#eb6834"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="1608" fill="#fcfcfb"/>
+
+  <!-- 标题区 -->
+  <text class="h1" x="90" y="100">aether-search · MCP 双通道搜索架构</text>
+  <text class="sub" x="90" y="138">一次 search 调用同时驱动两条独立检索通道，结果核验后统一装配返回</text>
+
+  <!-- 图例 -->
+  <rect class="card" x="1064" y="62" width="446" height="84" rx="14"/>
+  <rect x="1088" y="80" width="18" height="18" rx="5" fill="#2a78d6"/>
+  <text class="body" x="1118" y="95">Grok 通道 · LLM 联网检索（蓝色标识）</text>
+  <rect x="1088" y="112" width="18" height="18" rx="5" fill="#eb6834"/>
+  <text class="body" x="1118" y="127">Agent 通道 · 多后端检索（橙色标识）</text>
+
+  <!-- 入口行 -->
+  <rect class="card" x="300" y="176" width="390" height="74" rx="14"/>
+  <text class="cardT m" x="495" y="205">MCP 客户端</text>
+  <text class="small m" x="495" y="231">Claude Code · Cherry Studio 等</text>
+
+  <path class="flow" d="M 690 213 H 876"/>
+  <text class="tiny m" x="783" y="198">stdio（JSON-RPC）</text>
+
+  <rect class="card" x="880" y="176" width="400" height="74" rx="14"/>
+  <text class="cardT m" x="1080" y="205">FastMCP 入口 · aether-search</text>
+  <text class="small m" x="1080" y="231">7 个 MCP 工具 · AETHER_* 环境变量配置</text>
+
+  <path class="flow" d="M 1080 250 V 266 H 800 V 276"/>
+
+  <!-- 触发节点 -->
+  <rect x="590" y="282" width="420" height="56" rx="28" fill="#ffffff" stroke="#0b0b0b" stroke-width="2" filter="url(#shadow)"/>
+  <text class="pillT m" x="800" y="317">search(query) · 双通道并行执行</text>
+
+  <path class="flow" d="M 800 338 V 366 H 425 V 504"/>
+  <path class="flow" d="M 800 338 V 366 H 1175 V 504"/>
+
+  <!-- ============ Grok 通道 ============ -->
+  <rect class="lane" x="90" y="512" width="670" height="668" rx="18"/>
+  <rect x="106" y="526" width="638" height="6" rx="3" fill="#2a78d6"/>
+  <rect x="120" y="548" width="20" height="20" rx="6" fill="#2a78d6"/>
+  <text class="laneT" x="152" y="566">Grok 通道</text>
+  <rect class="tag" x="616" y="546" width="128" height="28" rx="14"/>
+  <text class="tagT m" x="680" y="565">并行通道</text>
+  <text class="small" x="120" y="598">LLM 联网检索 · 产出带引用的模型答案</text>
+
+  <rect class="inner" x="120" y="618" width="610" height="90" rx="12"/>
+  <text class="stepT" x="140" y="646">接入端点形态</text>
+  <rect class="chip" x="140" y="660" width="182" height="38" rx="9"/>
+  <text class="chipT m" x="231" y="684">OpenAI 兼容</text>
+  <rect class="chip" x="336" y="660" width="182" height="38" rx="9"/>
+  <text class="chipT m" x="427" y="684">xAI 官方</text>
+  <rect class="chip" x="532" y="660" width="182" height="38" rx="9"/>
+  <text class="chipT m" x="623" y="684">CPA 自建</text>
+
+  <path class="flow" d="M 425 708 V 728"/>
+
+  <rect class="inner" x="120" y="732" width="610" height="92" rx="12"/>
+  <text class="stepT" x="140" y="760">多端点容错调度</text>
+  <text class="body" x="140" y="788">sequential 主备切换 ｜ race 有限并发竞速</text>
+  <text class="tiny" x="140" y="812">重试共享总时限 · 尊重 Retry-After</text>
+
+  <path class="flow" d="M 425 824 V 844"/>
+
+  <rect class="inner" x="120" y="848" width="610" height="92" rx="12"/>
+  <text class="stepT" x="140" y="876">官方 OpenAI SDK 请求</text>
+  <text class="body" x="140" y="904">Chat Completions ｜ Responses 两种协议</text>
+  <text class="tiny" x="140" y="928">Responses 可携带原生 web_search 搜索工具</text>
+
+  <path class="flow" d="M 425 940 V 960"/>
+
+  <rect x="120" y="964" width="610" height="100" rx="12" fill="#ffffff" stroke="#2a78d6" stroke-width="2"/>
+  <text class="cardT" x="140" y="996">模型答案 + 结构化引用</text>
+  <text class="small" x="140" y="1022">引用去重整理为 Sources 列表</text>
+  <text class="tiny" x="140" y="1046">空正文 / 失败 → 本通道返回空结果</text>
+
+  <text class="tiny m" x="425" y="1130">并发检索 · 汇合后统一返回</text>
+
+  <!-- ============ Agent 通道 ============ -->
+  <rect class="lane" x="840" y="512" width="670" height="668" rx="18"/>
+  <rect x="856" y="526" width="638" height="6" rx="3" fill="#eb6834"/>
+  <rect x="870" y="548" width="20" height="20" rx="6" fill="#eb6834"/>
+  <text class="laneT" x="902" y="566">Agent 通道</text>
+  <rect class="tag" x="1366" y="546" width="128" height="28" rx="14"/>
+  <text class="tagT m" x="1430" y="565">并行通道</text>
+  <text class="small" x="870" y="598">多后端关键词检索 · 可选 Aux LLM 升级为答案</text>
+
+  <rect class="inner" x="870" y="618" width="610" height="238" rx="12"/>
+  <text class="stepT" x="890" y="646">搜索后端（9 个 · 配哪个启用哪个）</text>
+  <rect class="chip" x="890" y="660" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="980" y="684">Exa</text>
+  <rect class="chip" x="1084" y="660" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="1174" y="684">Serper</text>
+  <rect class="chip" x="1278" y="660" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="1368" y="684">Brave</text>
+  <rect class="chip" x="890" y="704" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="980" y="728">You.com</text>
+  <rect class="chip" x="1084" y="704" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="1174" y="728">Parallel</text>
+  <rect class="chip" x="1278" y="704" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="1368" y="728">Tavily</text>
+  <rect class="chip" x="890" y="748" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="980" y="772">Firecrawl</text>
+  <rect class="chip" x="1084" y="748" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="1174" y="772">Linkup</text>
+  <rect class="chip" x="1278" y="748" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="1368" y="772">Sonar</text>
+  <path class="sep" d="M 890 806 H 1460"/>
+  <text class="tiny" x="890" y="828">主层参与 search 默认扇出；补充层（如 sonar / linkup）不参与</text>
+  <text class="tiny" x="890" y="850">补充层仅由 search_deep(query) 显式调用，不自动级联</text>
+
+  <path class="flow" d="M 1175 856 V 876"/>
+
+  <rect class="inner" x="870" y="880" width="610" height="84" rx="12"/>
+  <text class="stepT" x="890" y="908">检索扇出 + RRF 融合去重</text>
+  <text class="small" x="890" y="936">并发查询已配置主层后端 → evidence 证据池</text>
+
+  <path class="flow" d="M 1175 964 V 980 H 1015 V 1006"/>
+  <path class="flow" d="M 1175 964 V 980 H 1335 V 1006"/>
+
+  <rect x="870" y="1012" width="290" height="94" rx="12" fill="#ffffff" stroke="#eb6834" stroke-width="1.8"/>
+  <rect class="tag" x="886" y="1024" width="158" height="26" rx="13"/>
+  <text class="tagT m" x="965" y="1042">已配置 Aux LLM</text>
+  <text class="body" x="886" y="1070">LLM 工具调用循环</text>
+  <text class="tiny" x="886" y="1094">自主检索 / 抓全文 → 带引用答案</text>
+
+  <rect x="1190" y="1012" width="290" height="94" rx="12" fill="#ffffff" stroke="#e7e4df" stroke-width="1.5"/>
+  <rect class="tag" x="1206" y="1024" width="158" height="26" rx="13"/>
+  <text class="tagT m" x="1285" y="1042">未配置 Aux LLM</text>
+  <text class="body" x="1206" y="1070">跳过 LLM 升级</text>
+  <text class="tiny" x="1206" y="1094">直接返回 evidence 证据链接</text>
+
+  <path class="flowO" d="M 1015 1106 V 1118"/>
+
+  <rect x="870" y="1122" width="290" height="52" rx="10" fill="#ffffff" stroke="#eb6834" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text class="tiny" x="886" y="1142" font-weight="600" fill="#0b0b0b">fetch_page · 按需抓取页面</text>
+  <text x="886" y="1164" font-size="16" fill="#52514e">Tavily Extract→Firecrawl Scrape</text>
+
+  <!-- ============ 汇合核验 ============ -->
+  <path class="flow" d="M 425 1180 V 1212 H 640 V 1240"/>
+  <path class="flow" d="M 1175 1180 V 1212 H 960 V 1240"/>
+
+  <rect class="card" x="440" y="1248" width="720" height="96" rx="14"/>
+  <text class="cardT m" x="800" y="1278">URL 重合检查 + 链接可达性</text>
+  <text class="small m" x="800" y="1306">同一 URL 被两条通道命中 → ✓ 印证 ｜ 死链（404 / 410）→ ⚠</text>
+  <text class="tiny m" x="800" y="1330">仅核验链接重合与可达性，不判定内容真伪</text>
+
+  <path class="flow" d="M 800 1344 V 1372"/>
+
+  <rect class="card" x="380" y="1376" width="840" height="92" rx="14"/>
+  <text class="cardT m" x="800" y="1406">输出装配</text>
+  <text class="body m" x="800" y="1434">Grok 优先 ｜ Agent 接替 ｜ 证据兜底（双通道均失败时）</text>
+  <text class="tiny m" x="800" y="1458">信源去重写入会话缓存 · 生成 session_id</text>
+
+  <path class="flow" d="M 800 1468 V 1494"/>
+
+  <rect class="card" x="470" y="1498" width="660" height="74" rx="14"/>
+  <text class="cardT m" x="800" y="1528">Markdown 答案 + 核验标记 + 引用</text>
+  <text class="tiny m" x="800" y="1554">get_sources(session_id) 取回全部信源</text>
+</svg>
