@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="ttl dsc">
+  <title id="ttl">aether-search logo</title>
+  <desc id="dsc">Orbital emblem: a broad cobalt-blue crescent arcs across the top from the upper left toward the right, a warm-orange crescent sweeps below from the lower right toward the left, and a compact four-point spark sits at the center in clear negative space.</desc>
+  <path fill="#2a78d6" d="M 80.7 225.1 A 178 178 0 0 1 431.3 225.1 A 217 217 0 0 0 80.7 225.1 Z"/>
+  <path fill="#eb6834" d="M 431.3 286.9 A 178 178 0 0 1 80.7 286.9 A 217 217 0 0 0 431.3 286.9 Z"/>
+  <path fill="#2a78d6" d="M 256 194 L 268 244 L 318 256 L 268 268 L 256 318 L 244 268 L 194 256 L 244 244 Z"/>
+</svg>

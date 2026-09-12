@@ -1,0 +1,195 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1608" role="img" aria-labelledby="ttl dsc">
+  <title id="ttl">aether-search MCP dual-channel search architecture</title>
+  <desc id="dsc">MCP clients connect to the FastMCP entry over stdio; one search call runs the configured and available channels in parallel: the Grok channel (OpenAI-compatible, xAI official or CPA endpoints, scheduled as multi-endpoint sequential fallback or bounded race, requested via the OpenAI SDK Chat Completions or Responses protocol, producing a cited model answer) and the Agent channel (9 search backends fanned out and fused with RRF into an evidence pool; with an Aux LLM configured it runs a tool-calling loop to produce a cited answer, fetching pages on demand via fetch_page, Tavily Extract then Firecrawl Scrape; without one it returns evidence links directly). The two results merge into a URL overlap check and link reachability verification, then output assembly (Grok first, Agent takes over, evidence fallback), sources go into the session cache, and a Markdown answer plus a get_sources session handle is returned.</desc>
+  <defs>
+    <style>
+      text{font-family:system-ui,'Noto Sans CJK SC','Noto Sans SC','Microsoft YaHei',sans-serif}
+      .h1{font-size:38px;font-weight:700;fill:#0b0b0b}
+      .sub{font-size:20px;fill:#52514e}
+      .laneT{font-size:26px;font-weight:700;fill:#0b0b0b}
+      .cardT{font-size:22px;font-weight:600;fill:#0b0b0b}
+      .stepT{font-size:20px;font-weight:600;fill:#0b0b0b}
+      .body{font-size:18px;fill:#0b0b0b}
+      .small{font-size:18px;fill:#52514e}
+      .tiny{font-size:17px;fill:#52514e}
+      .chipT{font-size:18px;fill:#0b0b0b}
+      .tagT{font-size:16px;fill:#52514e}
+      .pillT{font-size:21px;font-weight:700;fill:#0b0b0b}
+      .m{text-anchor:middle}
+      .lane{fill:#ffffff;stroke:#e7e4df;stroke-width:1.5;filter:url(#shadow)}
+      .card{fill:#ffffff;stroke:#e7e4df;stroke-width:1.5;filter:url(#shadow)}
+      .inner{fill:#faf9f7;stroke:#e7e4df;stroke-width:1}
+      .chip{fill:#ffffff;stroke:#d9d5cf;stroke-width:1}
+      .tag{fill:#f4f2ef}
+      .flow{fill:none;stroke:#a7a49e;stroke-width:2;marker-end:url(#ah)}
+      .flowO{fill:none;stroke:#eb6834;stroke-width:2;marker-end:url(#ahO)}
+      .sep{fill:none;stroke:#d9d5cf;stroke-width:1.5;stroke-dasharray:5 4}
+    </style>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="5" flood-color="#0b0b0b" flood-opacity="0.06"/>
+    </filter>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#a7a49e"/>
+    </marker>
+    <marker id="ahO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#eb6834"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="1608" fill="#fcfcfb"/>
+
+  <!-- 标题区 -->
+  <text class="h1" x="90" y="100">aether-search · Dual-Channel MCP</text>
+  <text class="sub" x="90" y="138">One search call runs two retrieval channels in parallel; results are verified, then assembled</text>
+
+  <!-- 图例 -->
+  <rect class="card" x="1064" y="62" width="446" height="84" rx="14"/>
+  <rect x="1088" y="80" width="18" height="18" rx="5" fill="#2a78d6"/>
+  <text class="body" x="1118" y="95">Grok channel · LLM web search (blue)</text>
+  <rect x="1088" y="112" width="18" height="18" rx="5" fill="#eb6834"/>
+  <text class="body" x="1118" y="127">Agent channel · multi-backend (orange)</text>
+
+  <!-- 入口行 -->
+  <rect class="card" x="300" y="176" width="390" height="74" rx="14"/>
+  <text class="cardT m" x="495" y="205">MCP Clients</text>
+  <text class="small m" x="495" y="231">Claude Code · Cherry Studio · etc.</text>
+
+  <path class="flow" d="M 690 213 H 876"/>
+  <text class="tiny m" x="783" y="198">stdio (JSON-RPC)</text>
+
+  <rect class="card" x="880" y="176" width="400" height="74" rx="14"/>
+  <text class="cardT m" x="1080" y="205">FastMCP entry · aether-search</text>
+  <text class="small m" x="1080" y="231">7 MCP tools · AETHER_* env variables</text>
+
+  <path class="flow" d="M 1080 250 V 266 H 800 V 276"/>
+
+  <!-- 触发节点 -->
+  <rect x="590" y="282" width="420" height="56" rx="28" fill="#ffffff" stroke="#0b0b0b" stroke-width="2" filter="url(#shadow)"/>
+  <text class="pillT m" x="800" y="317">search(query) · dual-channel parallel</text>
+
+  <path class="flow" d="M 800 338 V 366 H 425 V 504"/>
+  <path class="flow" d="M 800 338 V 366 H 1175 V 504"/>
+
+  <!-- ============ Grok 通道 ============ -->
+  <rect class="lane" x="90" y="512" width="670" height="668" rx="18"/>
+  <rect x="106" y="526" width="638" height="6" rx="3" fill="#2a78d6"/>
+  <rect x="120" y="548" width="20" height="20" rx="6" fill="#2a78d6"/>
+  <text class="laneT" x="152" y="566">Grok Channel</text>
+  <rect class="tag" x="616" y="546" width="128" height="28" rx="14"/>
+  <text class="tagT m" x="680" y="565">parallel lane</text>
+  <text class="small" x="120" y="598">LLM web search · cited model answers</text>
+
+  <rect class="inner" x="120" y="618" width="610" height="90" rx="12"/>
+  <text class="stepT" x="140" y="646">Endpoint Types</text>
+  <rect class="chip" x="140" y="660" width="182" height="38" rx="9"/>
+  <text class="chipT m" x="231" y="684" style="font-size:17px">OpenAI-compatible</text>
+  <rect class="chip" x="336" y="660" width="182" height="38" rx="9"/>
+  <text class="chipT m" x="427" y="684">xAI official</text>
+  <rect class="chip" x="532" y="660" width="182" height="38" rx="9"/>
+  <text class="chipT m" x="623" y="684">Self-hosted CPA</text>
+
+  <path class="flow" d="M 425 708 V 728"/>
+
+  <rect class="inner" x="120" y="732" width="610" height="92" rx="12"/>
+  <text class="stepT" x="140" y="760">Multi-endpoint Failover</text>
+  <text class="body" x="140" y="788">sequential fallback ｜ race bounded concurrency</text>
+  <text class="tiny" x="140" y="812">Shared retry budget · honors Retry-After</text>
+
+  <path class="flow" d="M 425 824 V 844"/>
+
+  <rect class="inner" x="120" y="848" width="610" height="92" rx="12"/>
+  <text class="stepT" x="140" y="876">Official OpenAI SDK Request</text>
+  <text class="body" x="140" y="904">Chat Completions ｜ Responses protocols</text>
+  <text class="tiny" x="140" y="928">Responses can carry native web_search</text>
+
+  <path class="flow" d="M 425 940 V 960"/>
+
+  <rect x="120" y="964" width="610" height="100" rx="12" fill="#ffffff" stroke="#2a78d6" stroke-width="2"/>
+  <text class="cardT" x="140" y="996">Model Answer + Structured Citations</text>
+  <text class="small" x="140" y="1022">Citations deduped into a Sources list</text>
+  <text class="tiny" x="140" y="1046">Empty body / failure → channel returns empty</text>
+
+  <text class="tiny m" x="425" y="1130">Concurrent retrieval · merged into one response</text>
+
+  <!-- ============ Agent 通道 ============ -->
+  <rect class="lane" x="840" y="512" width="670" height="668" rx="18"/>
+  <rect x="856" y="526" width="638" height="6" rx="3" fill="#eb6834"/>
+  <rect x="870" y="548" width="20" height="20" rx="6" fill="#eb6834"/>
+  <text class="laneT" x="902" y="566">Agent Channel</text>
+  <rect class="tag" x="1366" y="546" width="128" height="28" rx="14"/>
+  <text class="tagT m" x="1430" y="565">parallel lane</text>
+  <text class="small" x="870" y="598">Multi-backend retrieval · optional Aux LLM answer upgrade</text>
+
+  <rect class="inner" x="870" y="618" width="610" height="238" rx="12"/>
+  <text class="stepT" x="890" y="646">Search Backends (9 · configure to enable)</text>
+  <rect class="chip" x="890" y="660" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="980" y="684">Exa</text>
+  <rect class="chip" x="1084" y="660" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="1174" y="684">Serper</text>
+  <rect class="chip" x="1278" y="660" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="1368" y="684">Brave</text>
+  <rect class="chip" x="890" y="704" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="980" y="728">You.com</text>
+  <rect class="chip" x="1084" y="704" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="1174" y="728">Parallel</text>
+  <rect class="chip" x="1278" y="704" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="1368" y="728">Tavily</text>
+  <rect class="chip" x="890" y="748" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="980" y="772">Firecrawl</text>
+  <rect class="chip" x="1084" y="748" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="1174" y="772">Linkup</text>
+  <rect class="chip" x="1278" y="748" width="180" height="38" rx="9"/>
+  <text class="chipT m" x="1368" y="772">Sonar</text>
+  <path class="sep" d="M 890 806 H 1460"/>
+  <text class="tiny" x="890" y="828">Primary layer joins the default search fan-out</text>
+  <text class="tiny" x="890" y="850">Supplementary only via search_deep(query); no auto cascade</text>
+
+  <path class="flow" d="M 1175 856 V 876"/>
+
+  <rect class="inner" x="870" y="880" width="610" height="84" rx="12"/>
+  <text class="stepT" x="890" y="908">Fan-out + RRF Fusion</text>
+  <text class="small" x="890" y="936">Concurrent queries over primary backends → evidence pool</text>
+
+  <path class="flow" d="M 1175 964 V 980 H 1015 V 1006"/>
+  <path class="flow" d="M 1175 964 V 980 H 1335 V 1006"/>
+
+  <rect x="870" y="1012" width="290" height="94" rx="12" fill="#ffffff" stroke="#eb6834" stroke-width="1.8"/>
+  <rect class="tag" x="886" y="1024" width="158" height="26" rx="13"/>
+  <text class="tagT m" x="965" y="1042" style="font-size:15px">Aux LLM configured</text>
+  <text class="body" x="886" y="1070">LLM tool-calling loop</text>
+  <text class="tiny" x="886" y="1094">search · fetch → cited answer</text>
+
+  <rect x="1190" y="1012" width="290" height="94" rx="12" fill="#ffffff" stroke="#e7e4df" stroke-width="1.5"/>
+  <rect class="tag" x="1206" y="1024" width="158" height="26" rx="13"/>
+  <text class="tagT m" x="1285" y="1042" style="font-size:15px">Aux LLM not set</text>
+  <text class="body" x="1206" y="1070">Skips the LLM upgrade</text>
+  <text class="tiny" x="1206" y="1094">Returns evidence links</text>
+
+  <path class="flowO" d="M 1015 1106 V 1118"/>
+
+  <rect x="870" y="1122" width="290" height="52" rx="10" fill="#ffffff" stroke="#eb6834" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text class="tiny" x="886" y="1142" font-weight="600" fill="#0b0b0b">fetch_page · on-demand fetch</text>
+  <text x="886" y="1164" font-size="16" fill="#52514e">Tavily Extract→Firecrawl Scrape</text>
+
+  <!-- ============ 汇合核验 ============ -->
+  <path class="flow" d="M 425 1180 V 1212 H 640 V 1240"/>
+  <path class="flow" d="M 1175 1180 V 1212 H 960 V 1240"/>
+
+  <rect class="card" x="440" y="1248" width="720" height="96" rx="14"/>
+  <text class="cardT m" x="800" y="1278">URL Overlap Check + Link Reachability</text>
+  <text class="small m" x="800" y="1306">URL hit by both channels → ✓ corroborated ｜ dead link (404 / 410) → ⚠</text>
+  <text class="tiny m" x="800" y="1330">Link overlap and reachability only; not content truth</text>
+
+  <path class="flow" d="M 800 1344 V 1372"/>
+
+  <rect class="card" x="380" y="1376" width="840" height="92" rx="14"/>
+  <text class="cardT m" x="800" y="1406">Output Assembly</text>
+  <text class="body m" x="800" y="1434">Grok first ｜ Agent takes over ｜ evidence fallback (both failed)</text>
+  <text class="tiny m" x="800" y="1458">Sources deduped into session cache · session_id issued</text>
+
+  <path class="flow" d="M 800 1468 V 1494"/>
+
+  <rect class="card" x="470" y="1498" width="660" height="74" rx="14"/>
+  <text class="cardT m" x="800" y="1528">Markdown Answer + Verification Marks + Citations</text>
+  <text class="tiny m" x="800" y="1554">get_sources(session_id) retrieves all sources</text>
+</svg>
