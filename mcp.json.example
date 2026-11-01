@@ -34,6 +34,7 @@
         "AETHER_SONAR_API_KEY": "pplx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
         "AETHER_TAVILY_API_KEY": "tvly-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
         "AETHER_FIRECRAWL_API_KEY": "fc-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "AETHER_DEEPSEEK_API_KEY": "",
 
         "AETHER_FANOUT": "economy",
         "AETHER_MAX_VARIANTS": "3",

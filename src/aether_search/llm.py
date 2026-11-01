@@ -61,4 +61,7 @@ class LLMClient:
         raw = {"role": "assistant", "content": m.content}
         if m.tool_calls:
             raw["tool_calls"] = m.tool_calls
+        # DeepSeek thinking-mode tool calls require this field on subsequent requests.
+        if getattr(m, "reasoning_content", None) is not None:
+            raw["reasoning_content"] = m.reasoning_content
         return ToolCallResult(m.content or "", m.tool_calls or [], raw)

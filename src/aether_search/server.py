@@ -213,7 +213,7 @@ async def get_sources(session_id: str) -> str:
 
 @mcp.tool()
 async def web_fetch(url: str) -> str:
-    """Fetch a URL as structured Markdown (Tavily Extract -> Firecrawl Scrape)."""
+    """Fetch a URL as Markdown (DeepSeek Fetch -> Tavily Extract -> Firecrawl Scrape)."""
     return await fetcher.fetch(url)
 
 

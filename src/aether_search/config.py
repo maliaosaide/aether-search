@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     firecrawl_api_url: str = Field(default="https://api.firecrawl.dev/v2")
     parallel_api_key: str = Field(default="")
     parallel_api_url: str = Field(default="https://api.parallel.ai/v1")
+    deepseek_api_key: str = Field(default="")
+    deepseek_api_url: str = Field(default="https://api.deepseek.com")
 
     # Fan-out / fusion
     fanout: str = Field(default="economy", description="economy: original x all backends + variants round-robin; full: variants x backends")

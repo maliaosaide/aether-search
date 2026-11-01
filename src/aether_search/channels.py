@@ -35,13 +35,13 @@ SEARCH_MULTI_SPEC = {"type": "function", "function": {
     "name": "search_multi",
     "description": "Fan out across configured search backends + RRF fusion. Returns an evidence block (title/url/snippet/backend).",
     "parameters": {"type": "object",
-                   "properties": {"query": {"type": "string", "description": "Search query"}},
+                   "properties": {"query": {"type": "string", "description": "Concise search query; DeepSeek accepts at most 128 characters"}},
                    "required": ["query"]},
 }}
 
 FETCH_PAGE_SPEC = {"type": "function", "function": {
     "name": "fetch_page",
-    "description": "Fetch a URL and return its content as markdown (Tavily Extract -> Firecrawl Scrape).",
+    "description": "Fetch a URL as markdown (DeepSeek Fetch -> Tavily Extract -> Firecrawl Scrape).",
     "parameters": {"type": "object",
                    "properties": {"url": {"type": "string", "description": "URL to fetch"}},
                    "required": ["url"]},
@@ -55,7 +55,7 @@ def _format_evidence(sources: list[Source], limit: int = 20) -> str:
     for i, s in enumerate(sources[:limit], 1):
         lines.append(f"[{i}] {s.title or s.url} — {s.url} ({s.connector})")
         if s.content:
-            lines.append(f"    {s.content[:280]}")
+            lines.append(f"    {s.content[:800]}")
     return "\n".join(lines)
 
 

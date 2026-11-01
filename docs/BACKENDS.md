@@ -1,7 +1,8 @@
 # 搜索后端申请与配置指南
 
 > **数据查询日期：2026-07-27**。本指南中每一项额度与价格均来自各服务官方 pricing / docs 页面（一手），并在文末标注来源。**原则：配哪个用哪个，未配置的静默跳过，绝不影响运行。**
-> aether-search 采用双通道架构：**Grok 主通道**（AI 综合答案）+ **Aux 辅助通道**（9 个搜索后端 RRF 融合）。Aux 通道至少配一个后端 key 才会启用；否则仅走 Grok。
+> aether-search 采用双通道架构：**Grok 主通道**（AI 综合答案）+ **Agent 通道**（10 个搜索后端 RRF 融合）。Agent 通道至少配一个主层后端 key 才会启用；不配置 Grok 时可独立运行。
+> **DeepSeek Search / Fetch 于 2026-11-01 补充**，其接口与计费以对应小节的官方文档为准，其余条目的查询日期不变。
 
 ---
 
@@ -19,6 +20,7 @@
 | 7 | **Brave** | Aux | $5 月度额度（≈1,000 次，**需信用卡反欺诈**） | $5/1k requests | `api.search.brave.com` | `AETHER_BRAVE_API_KEY` |
 | 8 | **Exa** | Aux | **$10 credit/月**（可再生）+ 注册 $20 + Startup/Education $1,000 grant | $7/1k Search | `dashboard.exa.ai` | `AETHER_EXA_API_KEY` |
 | 9 | **Perplexity Sonar** | Aux | **无免费层（需信用卡）** | Sonar：$1/1M 入 + $1/1M 出 + search $5/1k | `perplexity.ai`（Settings → API） | `AETHER_SONAR_API_KEY` |
+| 10 | **DeepSeek** | Agent + 抓取 | 指南未列免费额度 | Search / Fetch 均为 ¥5/1k 次有结果的成功请求 | `platform.deepseek.com` | `AETHER_DEEPSEEK_API_KEY` |
 
 > **免费额度排名**（建议优先配置顺序）：You.com $100 ≫ Parallel 5,000/月 > Linkup 4,000（一次性）> Serper 2,500 > Exa $10/月（≈1.4k Search）> Tavily 1,000/月 ≈ Firecrawl 1,000/月 ≈ Brave $5/月 > Sonar（无）。
 
@@ -195,6 +197,29 @@ aether-search 里 Parallel 是 `multi_query` 后端——一次调用吃掉 AuxA
   # AETHER_SONAR_MODEL=sonar   # 默认值，最便宜档
   ```
 - **来源**：[docs.perplexity.ai/guides/pricing](https://docs.perplexity.ai/guides/pricing)、[docs.perplexity.ai/guides/getting-started](https://docs.perplexity.ai/guides/getting-started)
+
+---
+
+### 10. DeepSeek Search / Fetch
+
+- **定位**：Agent 通道的网页检索与正文抓取，无需配置 Grok；搜索 API 不要求选择模型。
+- **价格**（2026-11-01 官方指南）：Search、Fetch 均为 **5 元 / 1,000 次有结果的成功请求**；空结果、失败不计费，`count` 不影响单次搜索价格。
+- **申请**：在 `platform.deepseek.com` 创建 API Key。
+- **最小配置**：
+  ```bash
+  AETHER_DEEPSEEK_API_KEY=your-deepseek-key
+  # AETHER_DEEPSEEK_API_URL=https://api.deepseek.com  # 服务根地址，不带 /v1
+  ```
+- 同一个 key 同时启用搜索和 Fetch。抓取顺序为 DeepSeek → Tavily → Firecrawl，跳过未配置的服务；`web_map` 仍需 Tavily。
+- 搜索词须为 **1～128 个 Unicode 字符**且非全空白，支持 `site:`、`lang:`、`after:` 等语法；超长查询返回后端错误，不自动截断。每次返回数量限制在 1～50。
+- 检索优先使用 `summary`，为空时使用 `snippet`；需要正文时由 Agent 调用 `fetch_page`，或由客户端直接调用 `web_fetch`。
+- 不配置 Aux LLM 时直接返回证据；如需 Agent 自动补搜、阅读与生成引用答案，再配置现有 LLM 字段（也可用其他 OpenAI 兼容模型）：
+  ```bash
+  AETHER_LLM_API_BASE=https://api.deepseek.com/v1
+  AETHER_LLM_API_KEY=your-deepseek-key
+  AETHER_LLM_MODEL=deepseek-flash
+  ```
+- **来源**：[Search](https://api-docs.deepseek.com/zh-cn/api/search)、[Fetch](https://api-docs.deepseek.com/zh-cn/api/fetch)、[接口指南与计费](https://api-docs.deepseek.com/zh-cn/guides/search)。
 
 ---
 

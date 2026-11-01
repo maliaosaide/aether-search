@@ -1,6 +1,6 @@
 [project]
 name = "aether-search"
-version = "0.2.0"
+version = "0.3.0"
 description = "Dual-channel search MCP: Grok primary + LLM-orchestrated multi-backend auxiliary retrieval"
 requires-python = ">=3.11"
 dependencies = [

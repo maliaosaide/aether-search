@@ -13,7 +13,7 @@
 aether-search 是一个基于 [FastMCP](https://github.com/jlowin/fastmcp) 的 MCP 搜索服务器，为 MCP 客户端（Claude Code、Cherry Studio 等）提供网络搜索工具。一次 `search` 调用对**已配置且可用的通道并行执行**：
 
 - **Grok 通道**：经 OpenAI 兼容 / xAI / CPA 端点调用 LLM 联网搜索，产出带引用的模型答案；
-- **Agent 通道**：扇出多个搜索 API 后端（9 个可选），RRF 融合去重得到证据池；配置 Aux LLM 时进一步通过工具调用产出带引用答案，未配置时直接返回证据链接。
+- **Agent 通道**：扇出多个搜索 API 后端（10 个可选），RRF 融合去重得到证据池；配置 Aux LLM 时进一步通过工具调用产出带引用答案，未配置时直接返回证据链接。
 
 两路结果汇合后做 URL 互证与死链探测，再统一装配返回。三个配置维度（Grok 端点 / 搜索后端 / Aux LLM）相互独立，配置哪个启用哪个，未配置的自动跳过；至少需配置 Grok 端点或一个主层搜索后端（已配置后端全部归入补充层时，Agent 通道不启用）。
 
@@ -23,7 +23,7 @@ aether-search 是一个基于 [FastMCP](https://github.com/jlowin/fastmcp) 的 M
 
 - **Grok 通道**：OpenAI 兼容 / xAI 官方 / CPA 自建端点，经官方 OpenAI SDK 走 Chat Completions 或 Responses 协议（Responses 可携带原生 `web_search`）；多端点支持 `sequential`（主备）或 `race`（有限并发竞速），重试共享总时限。
 - **Agent 通道**：起步检索无条件扇出已配置的主层后端并做 RRF 融合，得到 evidence 证据池；若配置了 Aux LLM 且端点支持 function calling，则进入工具调用循环（`search_multi` 追加检索、`fetch_page` 抓取全文），由 LLM 自主决定检索与收手时机；超步数 / 超时 / 异常时用已有证据收尾。
-- **页面抓取**：Agent LLM 的 `fetch_page` 与 `web_fetch` 工具共用同一抓取实现（Tavily Extract → Firecrawl Scrape）；`web_fetch` / `web_map`（Tavily Map）是可独立调用的 MCP 工具，Agent 的工具集不含 map。
+- **页面抓取**：Agent LLM 的 `fetch_page` 与 `web_fetch` 工具共用同一抓取实现（DeepSeek Fetch → Tavily Extract → Firecrawl Scrape）；`web_fetch` / `web_map`（Tavily Map）是可独立调用的 MCP 工具，Agent 的工具集不含 map。
 - **核验**：两通道返回后，引用做跨通道互证（同一 URL 两路命中标记 ✓），并对展示链接做可达性探测（404 / 410 标 ⚠）；仅核验链接本身，不判定内容真伪。
 - **装配**：Grok 有正文则 Grok 为主，附加 Agent 检索证据；Grok 空正文则 agent 接替；双失败则以证据链接兜底；全部未配置时返回配置错误。
 - **信源缓存**：每次 search 的全部信源（引用 + 证据）去重后写入会话缓存，并返回 `session_id`，可由 `get_sources` 取回。
@@ -36,6 +36,7 @@ aether-search 是一个基于 [FastMCP](https://github.com/jlowin/fastmcp) 的 M
 | 服务 | 通道角色 | 免费额度 | 付费价格 | 计费单位 | 官方价格页 |
 |---|---|---|---|---|---|
 | xAI Grok | 主通道（LLM 答案） | 按供应商 / 账户政策 | 按所选模型与搜索工具计费，价格随模型 / 工具变动 | Token + 工具调用 | [docs.x.ai](https://docs.x.ai/developers/models) |
+| DeepSeek | Agent + 抓取 | 指南未列免费额度 | Search / Fetch 均为 ¥5/1k 次有结果的成功请求（2026-11-01 补充） | 按请求 | [官方指南](https://api-docs.deepseek.com/zh-cn/guides/search) |
 | You.com | Aux | $100 起始额度；官网另列 100 次/日免费入口（本项目连接器仍需配置 key） | Search $5/1k calls（1–100 结果同价） | 按次 | [you.com/pricing](https://you.com/pricing) |
 | Parallel | Aux | 官网列每月最多 5,000 次免费、注册与月度额度（最高 $80 注册 + $5/月；资格与叠加规则未说明） | $1/1k（Turbo/Fast，10 结果）；$5/1k（Basic/Advanced）；额外结果 $1/1k 条 | 按请求 | [parallel.ai/pricing](https://parallel.ai/pricing) |
 | Exa | Aux | $20 注册 + $10/月 credit | Search $7/1k（含 10 结果）；每加 1 结果 +$1/1k | 按请求 | [exa.ai/pricing](https://exa.ai/pricing) |
@@ -46,7 +47,7 @@ aether-search 是一个基于 [FastMCP](https://github.com/jlowin/fastmcp) 的 M
 | Brave | Aux | $5 月度额度（免费方案需绑卡做反欺诈验证） | Search $5/1k requests | 按请求 | [brave.com/search/api](https://brave.com/search/api/) |
 | Perplexity Sonar | Aux | 定价页未列统一免费额度 | sonar：$1/1M 输入 + $1/1M 输出；搜索请求 $5 / $8 / $12 每 1k（按低 / 中 / 高搜索上下文） | Token + 按请求 | [docs.perplexity.ai](https://docs.perplexity.ai/guides/pricing) |
 
-Tavily / Firecrawl 的 key 同时驱动后端检索与 `web_fetch` / `web_map` 的页面抓取。各后端的申请步骤与环境变量见 [`docs/BACKENDS.md`](docs/BACKENDS.md)（该文档为 2026-07 记录，价格以上表为准）。
+DeepSeek / Tavily / Firecrawl 的 key 同时驱动后端检索与 `web_fetch` 的页面抓取；`web_map` 仅使用 Tavily。各后端的申请步骤与环境变量见 [`docs/BACKENDS.md`](docs/BACKENDS.md)（该文档为 2026-07 记录，价格以上表为准）。
 
 ## 检索质量参考（第三方基准）
 
@@ -64,7 +65,7 @@ Tavily / Firecrawl 的 key 同时驱动后端检索与 `web_fetch` / `web_map` �
 - 原文统计结论：未发现前四名（Brave / Firecrawl / Exa / Parallel Pro）之间的统计显著差异，并报告 Brave 对 Tavily 的显著优势。
 - 基准中的外部对照接口（本项目未接入）：Perplexity Search API 12.96（延迟 11 s 以上）、SerpAPI 12.28（~2.4 s）。注意 Perplexity 该项评的是其 Search API，不是本项目的 Sonar 连接器；SerpAPI 与 Serper 是不同服务。
 - 上表为评测源对 Parallel 两种模式的分别评分；本项目 Parallel 连接器请求 `mode=advanced`，与基准两种模式的对应关系未在本次核验范围内。
-- 本项目接入但无该基准可比数值的后端：You.com、Linkup、Serper、Sonar、Grok。
+- 本项目接入但无该基准可比数值的后端：You.com、Linkup、Serper、Sonar、DeepSeek、Grok。
 
 ## 安装与接入
 
@@ -142,8 +143,9 @@ PYTHONPATH=src python -m aether_search.server
 - `AETHER_LLM_API_BASE` / `_API_KEY` / `_MODEL`：配置后 agent 通道经工具调用产出带引用答案；端点须支持 function calling。
 - `AETHER_LLM_REWRITE`（默认 `true`）：是否把查询改写为子查询。
 
-**搜索后端**（9 个，配置 key 即启用）
-- `AETHER_<NAME>_API_KEY`，NAME ∈ `PARALLEL` / `BRAVE` / `EXA` / `SERPER` / `LINKUP` / `YOUCOM` / `SONAR` / `TAVILY` / `FIRECRAWL`；URL 均有官方默认值。
+**搜索后端**（10 个，配置 key 即启用）
+- `AETHER_<NAME>_API_KEY`，NAME ∈ `PARALLEL` / `BRAVE` / `EXA` / `SERPER` / `LINKUP` / `YOUCOM` / `SONAR` / `TAVILY` / `FIRECRAWL` / `DEEPSEEK`；URL 均有官方默认值。
+- **仅用 DeepSeek**：配置 `AETHER_DEEPSEEK_API_KEY` 即可搜索、抓取，无需 Grok。搜索词最多 128 字符；`AETHER_DEEPSEEK_API_URL` 默认 `https://api.deepseek.com`（不带 `/v1`）。需要 Agent 自动补搜与生成答案时，再配置上面的 Aux LLM；[配置示例](docs/BACKENDS.md#10-deepseek-search--fetch)。
 
 **分层 / Agent / 核验**
 - `AETHER_FALLBACK_BACKENDS`：补充层后端名（逗号分隔），不进 `search` 默认扇出。
@@ -169,7 +171,7 @@ PYTHONPATH=src python -m aether_search.server
 | `search(query, platform="", sources_mode="inline")` | 双通道并行搜索（主层后端扇出）；`sources_mode="session"` 时正文仅保留答案与核验块，信源经 `get_sources` 获取 |
 | `search_deep(query, platform="")` | 补充层检索（`AETHER_FALLBACK_BACKENDS` 指定的后端）；由上层根据 `search` 偏少提示决定是否调用 |
 | `get_sources(session_id)` | 取回指定会话的全部信源（带 ✓ ⚠ ? 核验标记） |
-| `web_fetch(url)` | 抓取单页为 Markdown（Tavily Extract → Firecrawl Scrape 降级） |
+| `web_fetch(url)` | 抓取单页为 Markdown（DeepSeek Fetch → Tavily Extract → Firecrawl Scrape 降级） |
 | `web_map(url, ...)` | 站点结构映射（Tavily Map） |
 | `toggle_builtin_tools(action)` | 开关调用方项目 `.claude/settings.json` 中 Claude 内置的 WebSearch / WebFetch（`on` / `off` / `status`） |
 | `get_config()` | 配置状态（key 脱敏）+ 逐端点 `/models` 连通性诊断 |
@@ -182,7 +184,7 @@ PYTHONPATH=src python -m aether_search.server
 - 经第三方中转的 Grok 端点可能返回空正文；多端点容错可配置备用端点。
 - 按量付费或配额受限后端可经 `AETHER_FALLBACK_BACKENDS` 归入补充层，避免每次 `search` 消耗。
 - 核验只覆盖链接重合与可达性，不判定引用内容的真伪。
-- 测试范围：Grok 通道含离线单元 / 回归测试与进程内 MCP 集成测试（双通道并行、信源合并、失败接替），不等于所有后端或真实联网效果均已验证。
+- 测试范围：Grok 通道含离线单元 / 回归测试与进程内 MCP 集成测试；DeepSeek 覆盖搜索、抓取降级、Agent 独立运行及工具调用历史。不等于所有后端或检索质量均已验证。
 
 ## 开发与测试
 
@@ -192,6 +194,7 @@ PYTHONPATH=src python -m aether_search.server
 PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_grok.py' -v
 PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_grok_protocol.py' -v
 PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_grok_integration.py' -v
+PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_deepseek.py' -v
 ```
 
 ## 相关文档

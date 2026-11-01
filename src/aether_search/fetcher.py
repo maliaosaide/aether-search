@@ -1,4 +1,4 @@
-"""Page fetcher: Tavily Extract -> Firecrawl Scrape, plus Tavily Map.
+"""Page fetcher: DeepSeek Fetch -> Tavily Extract -> Firecrawl Scrape, plus Tavily Map.
 
 Request formats reference grok-search server.py (verified code), rewritten aether-style.
 /search is NOT here — it lives in the Tavily/Firecrawl connectors (agent seed search).
@@ -12,7 +12,24 @@ from .config import settings
 
 
 def configured() -> bool:
-    return bool(settings.tavily_api_key or settings.firecrawl_api_key)
+    return bool(settings.deepseek_api_key or settings.tavily_api_key or settings.firecrawl_api_key)
+
+
+async def deepseek_fetch(url: str) -> str | None:
+    if not settings.deepseek_api_key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=settings.fetch_timeout) as client:
+            resp = await client.post(
+                f"{settings.deepseek_api_url.rstrip('/')}/v1/tools/fetch",
+                headers={"Authorization": f"Bearer {settings.deepseek_api_key}"},
+                json={"url": url},
+            )
+            resp.raise_for_status()
+            content = resp.json().get("content", "")
+            return content if content and content.strip() else None
+    except Exception:
+        return None
 
 
 async def tavily_extract(url: str) -> str | None:
@@ -54,7 +71,10 @@ async def firecrawl_scrape(url: str) -> str | None:
 
 
 async def fetch(url: str) -> str:
-    """Tavily Extract -> Firecrawl Scrape degradation."""
+    """DeepSeek Fetch -> Tavily Extract -> Firecrawl Scrape degradation."""
+    result = await deepseek_fetch(url)
+    if result:
+        return result
     result = await tavily_extract(url)
     if result:
         return result
@@ -62,7 +82,7 @@ async def fetch(url: str) -> str:
     if result:
         return result
     if not configured():
-        return "配置错误: AETHER_TAVILY_API_KEY 和 AETHER_FIRECRAWL_API_KEY 均未配置"
+        return "配置错误: 请配置 AETHER_DEEPSEEK_API_KEY、AETHER_TAVILY_API_KEY 或 AETHER_FIRECRAWL_API_KEY"
     return "提取失败: 所有提取服务均未能获取内容"
 
 

@@ -2,6 +2,7 @@
 
 from .base import Connector, SearchResult, Source
 from .brave import BraveConnector
+from .deepseek import DeepSeekConnector
 from .parallel import ParallelConnector
 from .exa import ExaConnector
 from .firecrawl import FirecrawlConnector
@@ -15,7 +16,7 @@ __all__ = ["Connector", "SearchResult", "Source", "active_connectors"]
 
 _ALL = [
     ParallelConnector, BraveConnector, ExaConnector, SerperConnector, LinkupConnector,
-    YoucomConnector, SonarConnector, TavilyConnector, FirecrawlConnector,
+    YoucomConnector, SonarConnector, TavilyConnector, FirecrawlConnector, DeepSeekConnector,
 ]
 
 

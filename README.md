@@ -13,7 +13,7 @@
 aether-search is an MCP search server built on [FastMCP](https://github.com/jlowin/fastmcp), providing web search tools for MCP clients (Claude Code, Cherry Studio, etc.). A single `search` call **runs the configured and available channels in parallel**:
 
 - **Grok channel**: calls LLM web search via OpenAI-compatible / xAI / CPA endpoints and produces a cited model answer;
-- **Agent channel**: fans out across multiple search API backends (9 optional), fuses and deduplicates results with RRF into an evidence pool; when an Aux LLM is configured it further produces a cited answer through tool calling, otherwise it returns evidence links directly.
+- **Agent channel**: fans out across multiple search API backends (10 optional), fuses and deduplicates results with RRF into an evidence pool; when an Aux LLM is configured it further produces a cited answer through tool calling, otherwise it returns evidence links directly.
 
 The two result sets are cross-corroborated by URL and probed for dead links, then assembled into a single response. The three configuration dimensions (Grok endpoint / search backends / Aux LLM) are independent — each enabled one runs, unset ones are skipped; at minimum configure a Grok endpoint or one primary-layer search backend (the Agent channel stays disabled if every configured backend is assigned to the supplementary layer).
 
@@ -23,7 +23,7 @@ The two result sets are cross-corroborated by URL and probed for dead links, the
 
 - **Grok channel**: OpenAI-compatible / xAI official / self-hosted CPA endpoints, speaking Chat Completions or Responses through the official OpenAI SDK (Responses can carry the native `web_search`); multiple endpoints support `sequential` (primary/backup) or `race` (bounded concurrent racing), with retries sharing one total deadline.
 - **Agent channel**: the seed search unconditionally fans out across all configured primary-layer backends and fuses them with RRF into an evidence pool; if an Aux LLM is configured and the endpoint supports function calling, it enters a tool-calling loop (`search_multi` for additional retrieval, `fetch_page` for full pages), with the LLM deciding when to search and when to stop; on step-limit / timeout / errors it wraps up with the evidence already gathered.
-- **Page fetching**: the Agent LLM's `fetch_page` and the `web_fetch` tool share the same fetching implementation (Tavily Extract → Firecrawl Scrape); `web_fetch` / `web_map` (Tavily Map) are independently callable MCP tools, and the Agent's toolset contains no map.
+- **Page fetching**: the Agent LLM's `fetch_page` and the `web_fetch` tool share the same fetching implementation (DeepSeek Fetch → Tavily Extract → Firecrawl Scrape); `web_fetch` / `web_map` (Tavily Map) are independently callable MCP tools, and the Agent's toolset contains no map.
 - **Verification**: after both channels return, citations are cross-corroborated (a URL hit by both channels is marked ✓) and displayed links are probed for reachability (404 / 410 marked ⚠); only the links themselves are checked, not content truth.
 - **Assembly**: if Grok has body text, Grok is primary with the Agent's retrieved evidence attached; if Grok's body is empty, the agent takes over; if both fail, evidence links serve as fallback; if nothing is configured, a configuration error is returned.
 - **Source cache**: all sources (citations + evidence) of each search are deduplicated into a session cache, and a `session_id` is returned that `get_sources` can retrieve.
@@ -36,6 +36,7 @@ The two result sets are cross-corroborated by URL and probed for dead links, the
 | Service | Channel role | Free quota | Paid pricing | Billing unit | Official pricing page |
 |---|---|---|---|---|---|
 | xAI Grok | Primary (LLM answers) | Per vendor / account policy | Billed by the selected model and search tools; prices vary by model / tool | Token + tool calls | [docs.x.ai](https://docs.x.ai/developers/models) |
+| DeepSeek | Agent + fetching | No free quota listed in the guide | Search / Fetch: ¥5/1k successful requests with results (added 2026-11-01) | Per request | [Official guide](https://api-docs.deepseek.com/zh-cn/guides/search) |
 | You.com | Aux | $100 starting credit; the site also lists a 100 queries/day free entry (this project's connector still requires a key) | Search $5/1k calls (1–100 results same price) | Per call | [you.com/pricing](https://you.com/pricing) |
 | Parallel | Aux | Site lists up to 5,000 free requests/month plus signup and monthly credits (up to $80 signup + $5/month; eligibility and stacking rules unspecified) | $1/1k (Turbo/Fast, 10 results); $5/1k (Basic/Advanced); extra results $1/1k results | Per request | [parallel.ai/pricing](https://parallel.ai/pricing) |
 | Exa | Aux | $20 signup + $10/month credit | Search $7/1k (10 results included); +$1/1k per extra result | Per request | [exa.ai/pricing](https://exa.ai/pricing) |
@@ -46,7 +47,7 @@ The two result sets are cross-corroborated by URL and probed for dead links, the
 | Brave | Aux | $5 monthly credit (free plan requires a card for anti-fraud verification) | Search $5/1k requests | Per request | [brave.com/search/api](https://brave.com/search/api/) |
 | Perplexity Sonar | Aux | No unified free quota listed on the pricing page | sonar: $1/1M input + $1/1M output; search requests $5 / $8 / $12 per 1k (by low / medium / high search context) | Token + per request | [docs.perplexity.ai](https://docs.perplexity.ai/guides/pricing) |
 
-The Tavily / Firecrawl keys drive both backend retrieval and page fetching for `web_fetch` / `web_map`. For each backend's signup steps and environment variables see [`docs/BACKENDS.md`](docs/BACKENDS.md) (Chinese; recorded 2026-07 — pricing follows the table above).
+The DeepSeek / Tavily / Firecrawl keys drive both backend retrieval and page fetching for `web_fetch`; `web_map` uses Tavily only. For each backend's signup steps and environment variables see [`docs/BACKENDS.md`](docs/BACKENDS.md) (Chinese; recorded 2026-07 — pricing follows the table above).
 
 ## Retrieval Quality Reference (Third-Party Benchmark)
 
@@ -64,7 +65,7 @@ The Tavily / Firecrawl keys drive both backend retrieval and page fetching for `
 - Statistical conclusion from the source: no statistically significant difference was found among the top four (Brave / Firecrawl / Exa / Parallel Pro), and Brave's advantage over Tavily is reported as significant.
 - External comparators in the benchmark (not integrated by this project): Perplexity Search API 12.96 (11+ s latency), SerpAPI 12.28 (~2.4 s). Note that the Perplexity entry scores its Search API, not this project's Sonar connector; SerpAPI and Serper are different services.
 - The table above scores the source's two Parallel modes separately; this project's Parallel connector requests `mode=advanced`, and its mapping to the benchmark's two modes was outside this verification round.
-- Backends integrated by this project without comparable scores in this benchmark: You.com, Linkup, Serper, Sonar, Grok.
+- Backends integrated by this project without comparable scores in this benchmark: You.com, Linkup, Serper, Sonar, DeepSeek, Grok.
 
 ## Installation & Setup
 
@@ -142,8 +143,9 @@ Full field list in [`.env.example`](.env.example) (one-to-one with `config.py`).
 - `AETHER_LLM_API_BASE` / `_API_KEY` / `_MODEL`: when configured, the agent channel produces a cited answer via tool calling; the endpoint must support function calling.
 - `AETHER_LLM_REWRITE` (default `true`): whether to rewrite the query into sub-queries.
 
-**Search backends** (9; setting a key enables it)
-- `AETHER_<NAME>_API_KEY`, NAME ∈ `PARALLEL` / `BRAVE` / `EXA` / `SERPER` / `LINKUP` / `YOUCOM` / `SONAR` / `TAVILY` / `FIRECRAWL`; URLs all have official defaults.
+**Search backends** (10; setting a key enables it)
+- `AETHER_<NAME>_API_KEY`, NAME ∈ `PARALLEL` / `BRAVE` / `EXA` / `SERPER` / `LINKUP` / `YOUCOM` / `SONAR` / `TAVILY` / `FIRECRAWL` / `DEEPSEEK`; URLs all have official defaults.
+- **DeepSeek only**: set `AETHER_DEEPSEEK_API_KEY` to enable search and page fetching without Grok. Search queries allow at most 128 characters; `AETHER_DEEPSEEK_API_URL` defaults to `https://api.deepseek.com` (without `/v1`). Configure the Aux LLM above for autonomous follow-up searches and cited answers; see the [configuration example](docs/BACKENDS.md#10-deepseek-search--fetch).
 
 **Layering / Agent / Verification**
 - `AETHER_FALLBACK_BACKENDS`: supplementary-layer backend names (comma-separated), excluded from the default `search` fan-out.
@@ -169,7 +171,7 @@ Full field list in [`.env.example`](.env.example) (one-to-one with `config.py`).
 | `search(query, platform="", sources_mode="inline")` | Dual-channel parallel search (primary-backend fan-out); with `sources_mode="session"` the body keeps only the answer and verification block, sources are fetched via `get_sources` |
 | `search_deep(query, platform="")` | Supplementary-layer retrieval (backends named by `AETHER_FALLBACK_BACKENDS`); called by the upper layer based on the sparse-results hint from `search` |
 | `get_sources(session_id)` | Retrieve all sources of a given session (with ✓ ⚠ ? verification marks) |
-| `web_fetch(url)` | Fetch a single page as Markdown (Tavily Extract → Firecrawl Scrape fallback) |
+| `web_fetch(url)` | Fetch a single page as Markdown (DeepSeek Fetch → Tavily Extract → Firecrawl Scrape fallback) |
 | `web_map(url, ...)` | Site structure mapping (Tavily Map) |
 | `toggle_builtin_tools(action)` | Toggle Claude's built-in WebSearch / WebFetch in the caller project's `.claude/settings.json` (`on` / `off` / `status`) |
 | `get_config()` | Configuration status (keys masked) + per-endpoint `/models` connectivity diagnostics |
@@ -182,7 +184,7 @@ Full field list in [`.env.example`](.env.example) (one-to-one with `config.py`).
 - Grok endpoints behind third-party relays may return empty bodies; multi-endpoint failover allows configuring backup endpoints.
 - Metered or quota-limited backends can be moved to the supplementary layer via `AETHER_FALLBACK_BACKENDS` to avoid consumption on every `search`.
 - Verification covers only link overlap and reachability, not the truth of cited content.
-- Test scope: the Grok channel has offline unit / regression tests and in-process MCP integration tests (dual-channel parallelism, source merging, failure takeover); this does not mean every backend or real-network behavior is verified.
+- Test scope: Grok has offline unit / regression and in-process MCP integration tests; DeepSeek covers search, fetch fallback, Agent-only operation, and tool-call history. This does not mean every backend or retrieval quality is verified.
 
 ## Development & Testing
 
@@ -192,6 +194,7 @@ Offline tests use the standard-library `unittest` with mocked HTTP transports; t
 PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_grok.py' -v
 PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_grok_protocol.py' -v
 PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_grok_integration.py' -v
+PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_deepseek.py' -v
 ```
 
 ## Related Documentation

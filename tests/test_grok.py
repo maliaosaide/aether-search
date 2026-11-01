@@ -735,14 +735,18 @@ class TestScheduling(unittest.IsolatedAsyncioTestCase):
         class PeakStream(httpx.AsyncByteStream):
             def __init__(self, payload):
                 self._payload = payload
-
-            async def __aiter__(self):
+                self._closed = False
+                # Count live responses; the SDK adapter may iterate a stream more than once.
                 state["inflight"] += 1
                 state["peak"] = max(state["peak"], state["inflight"])
-                try:
-                    await asyncio.sleep(0.05)
-                    yield self._payload
-                finally:
+
+            async def __aiter__(self):
+                await asyncio.sleep(0.05)
+                yield self._payload
+
+            async def aclose(self):
+                if not self._closed:
+                    self._closed = True
                     state["inflight"] -= 1
 
         payload = chat_sse(chat_chunk("raced"), chat_chunk(finish="stop"))
@@ -759,6 +763,7 @@ class TestScheduling(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result.error)
         self.assertLessEqual(state["peak"], 2)
         self.assertEqual(state["peak"], 2)
+        self.assertEqual(state["inflight"], 0)
 
     async def test_race_shared_retry_budget(self):
         attempts: list[str] = []
