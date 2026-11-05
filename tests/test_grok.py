@@ -633,6 +633,31 @@ class TestScheduling(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(calls), 2)
         self.assertIn("attempts=2", result.detail)
 
+    async def test_in_stream_server_error_retried(self):
+        transport, calls = make_transport([
+            sse_response(responses_sse({"type": "error", "error": {
+                "type": "server_error", "code": "internal_server_error", "message": "SECRET_X"}})),
+            sse_response(responses_sse(resp_completed([text_item("Recovered")]))),
+        ])
+        opts = options(provider="cpa", api_format="responses", retry_max_attempts=1)
+        result = await GrokChannel(opts, transport=transport).answer("q")
+        self.assertIsNone(result.error)
+        self.assertEqual(result.text, "Recovered")
+        self.assertEqual(len(calls), 2)
+
+    async def test_in_stream_client_error_not_retried(self):
+        transport, calls = make_transport([
+            sse_response(responses_sse({"type": "error", "error": {
+                "type": "invalid_request_error", "code": "invalid_value", "message": "SECRET_X"}})),
+            sse_response(responses_sse(resp_completed([text_item("Recovered")]))),
+        ])
+        opts = options(provider="cpa", api_format="responses", retry_max_attempts=5)
+        result = await GrokChannel(opts, transport=transport).answer("q")
+        self.assertIsNotNone(result.error)
+        self.assertEqual(result.text, "")
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn("SECRET_X", result.error + result.detail)
+
     async def test_401_never_retried_same_endpoint(self):
         transport, calls = make_transport([error_response(401), error_response(401)])
         opts = options(api_url="", endpoints=endpoints_json("https://one.test/v1", "https://two.test/v1"),

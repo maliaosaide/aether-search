@@ -79,7 +79,7 @@ CPA 或通用网关确实支持 Responses 时，可显式设置 `AETHER_GROK_API
 - Responses 采用 `response.completed` 的完整输出，只提取 assistant 消息的 `output_text`，不把 reasoning 或工具内容当成回答。
 - 收集结构化注解、可用的顶层 `citations` 和最终正文链接，去重后生成 `Sources:` 列表，供现有信源缓存读取。
 - `search=observed` 只表示观测到了搜索调用完成；其余为 `requested`／`unconfirmed`／`not_requested`。模型自称搜索过不算执行证据，链接存在也不等于内容已经核实。
-- 网络错误和 408／429／500／502／503／504 可以重试；认证、付费、参数、解析错误及空回答不在同一端点自动重试。`Retry-After` 和退避等待都受总时限约束。
+- 网络错误、408／429／500／502／503／504，以及网关随 HTTP 200 流式返回的 `server_error`／`rate_limit_error` 事件可以重试；认证、付费、参数、解析错误及空回答不在同一端点自动重试。`Retry-After` 和退避等待都受总时限约束。
 - 成功、失败、超时和取消时关闭流；损坏的响应返回通道错误，不击穿另一个通道。
 
 ## 离线验证与兼容边界

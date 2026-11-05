@@ -5,7 +5,8 @@
 - 三种接入形态(openai 兼容 / xAI 官方 / CPA 自建)共享同一 Chat 与 Responses 路径;
 - sequential 默认;race 用信号量限并发 + as_completed 竞争,首个完整成功获胜;
 - 共享额外重试计数:整个调用最多 端点数 + retry_max_attempts 次请求;
-  仅瞬时错误(网络/408/429/500/502/503/504)重试,鉴权/参数错误不重试;
+  仅瞬时错误(网络/408/429/500/502/503/504/流内 server_error)重试,
+  鉴权/参数错误不重试;
 - 构造函数永不因配置异常抛出;失败时 ``text`` 恒为空串、``evidence`` 恒为 ``[]``。
 """
 
@@ -50,8 +51,20 @@ from aether_search.grok_protocol import (
 CHANNEL_NAME = "grok"
 FAILOVERS = frozenset({"sequential", "race"})
 TRANSIENT_HTTP = frozenset({408, 429, 500, 502, 503, 504})
+# 网关以 SSE event:error 返回的瞬时服务端错误(SDK 抛 APIError,无 HTTP 状态码)
+TRANSIENT_STREAM_TYPES = frozenset({"server_error", "rate_limit_error"})
+TRANSIENT_STREAM_CODES = frozenset({
+    "internal_server_error", "server_error", "service_unavailable", "rate_limit_exceeded",
+})
 RETRY_BACKOFF_BASE = 0.4
 RETRY_BACKOFF_MAX = 4.0
+
+
+def _is_transient_stream_error(exc: openai.APIError) -> bool:
+    body = getattr(exc, "body", None)
+    return isinstance(body, dict) and (
+        body.get("type") in TRANSIENT_STREAM_TYPES or body.get("code") in TRANSIENT_STREAM_CODES
+    )
 
 
 def _is_num(value: object) -> bool:
@@ -482,8 +495,9 @@ class GrokChannel:
             return self._status_attempt(exc, search_state)
         except openai.APIConnectionError:  # 含超时:可重试;不外泄异常文本
             return _Attempt(retryable=True, error="network error", search_state=search_state)
-        except openai.APIError:
-            return _Attempt(error="chat stream error", search_state=search_state)
+        except openai.APIError as exc:
+            return _Attempt(retryable=_is_transient_stream_error(exc),
+                            error="chat stream error", search_state=search_state)
 
         if finish is not None and finish != "stop":
             # 已知截断/过滤/工具调用 + 未知取值一律失败;错误消息为固定常量
@@ -545,8 +559,9 @@ class GrokChannel:
             return self._status_attempt(exc, search_state)
         except openai.APIConnectionError:
             return _Attempt(retryable=True, error="network error", search_state=search_state)
-        except openai.APIError:
-            return _Attempt(error="responses stream error", search_state=search_state)
+        except openai.APIError as exc:
+            return _Attempt(retryable=_is_transient_stream_error(exc),
+                            error="responses stream error", search_state=search_state)
 
         if error is not None:
             return _Attempt(error=error, search_state=search_state)
