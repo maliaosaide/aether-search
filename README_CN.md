@@ -10,10 +10,11 @@
   <a href="README.md">English</a> | <strong>简体中文</strong>
 </p>
 
-aether-search 是一个基于 [FastMCP](https://github.com/jlowin/fastmcp) 的 MCP 搜索服务器，为 MCP 客户端（Claude Code、Cherry Studio 等）提供网络搜索工具。一次 `search` 调用对**已配置且可用的通道并行执行**：
+aether-search 是一个基于 [FastMCP](https://github.com/jlowin/fastmcp) 的 MCP 搜索服务器，为 MCP 客户端（Claude Code、Cherry Studio 等）提供网络搜索与图片检索工具。一次 `search` 调用对**已配置且可用的通道并行执行**：
 
 - **Grok 通道**：经 OpenAI 兼容 / xAI / CPA 端点调用 LLM 联网搜索，产出带引用的模型答案；
-- **Agent 通道**：扇出多个搜索 API 后端（10 个可选），RRF 融合去重得到证据池；配置 Aux LLM 时进一步通过工具调用产出带引用答案，未配置时直接返回证据链接。
+- **Agent 通道**：扇出多个搜索 API 后端（10 个可选），RRF 融合去重得到证据池；配置 Aux LLM 时进一步通过工具调用产出带引用答案，未配置时直接返回证据链接；
+- **图片检索**：独立的 `search_images` 工具，向已配置的图片后端并行请求，返回图片直链、缩略图、来源页与尺寸。
 
 两路结果汇合后做 URL 互证与死链探测，再统一装配返回。三个配置维度（Grok 端点 / 搜索后端 / Aux LLM）相互独立，配置哪个启用哪个，未配置的自动跳过；至少需配置 Grok 端点或一个主层搜索后端（已配置后端全部归入补充层时，Agent 通道不启用）。
 
@@ -28,6 +29,7 @@ aether-search 是一个基于 [FastMCP](https://github.com/jlowin/fastmcp) 的 M
 - **装配**：Grok 有正文则 Grok 为主，附加 Agent 检索证据；Grok 空正文则 agent 接替；双失败则以证据链接兜底；全部未配置时返回配置错误。
 - **信源缓存**：每次 search 的全部信源（引用 + 证据）去重后写入会话缓存，并返回 `session_id`，可由 `get_sources` 取回。
 - **后端分层**：默认全部已配置后端进主层参与 `search` 扇出；`AETHER_FALLBACK_BACKENDS` 指定的补充层（如 `sonar,linkup`）不参与默认扇出，仅由 `search_deep` 显式调用——`search` 不会自动级联到补充层，主层结果偏少时只输出提示，是否调用 `search_deep` 由上层决定。
+- **图片检索**：`search_images` 独立于双通道，向所有支持图片的已配置后端（Serper / Brave / Parallel / Tavily / Firecrawl / Linkup）并行请求，按 URL 去重、轮询合并后返回图片直链、缩略图、来源页与尺寸。
 
 ## 搜索后端价格与额度
 
@@ -170,11 +172,44 @@ PYTHONPATH=src python -m aether_search.server
 |---|---|
 | `search(query, platform="", sources_mode="inline")` | 双通道并行搜索（主层后端扇出）；`sources_mode="session"` 时正文仅保留答案与核验块，信源经 `get_sources` 获取 |
 | `search_deep(query, platform="")` | 补充层检索（`AETHER_FALLBACK_BACKENDS` 指定的后端）；由上层根据 `search` 偏少提示决定是否调用 |
+| `search_images(query, count=10)` | 图片检索：向已配置的 Serper / Brave / Parallel / Tavily / Firecrawl / Linkup 并行请求，去重轮询合并，返回图片直链、缩略图、来源页与尺寸 |
 | `get_sources(session_id)` | 取回指定会话的全部信源（带 ✓ ⚠ ? 核验标记） |
 | `web_fetch(url)` | 抓取单页为 Markdown（DeepSeek Fetch → Tavily Extract → Firecrawl Scrape 降级） |
 | `web_map(url, ...)` | 站点结构映射（Tavily Map） |
 | `toggle_builtin_tools(action)` | 开关调用方项目 `.claude/settings.json` 中 Claude 内置的 WebSearch / WebFetch（`on` / `off` / `status`） |
 | `get_config()` | 配置状态（key 脱敏）+ 逐端点 `/models` 连通性诊断 |
+
+## 图片搜索
+
+`search_images` 独立于 Grok / Agent 双通道，直接向所有已配置的图片后端并行请求，按图片 URL 去重后轮询合并。
+
+```text
+search_images(query: str, count: int = 10) -> Markdown
+```
+
+- `query`：想找的图片内容，例如 `"NVIDIA B300 GPU"`、`"golden gate bridge sunset"`；
+- `count`：合并后返回的最大数量（1–50，默认 10）；每个后端各自请求至多 `count` 条，再统一去重合并；
+- 返回：标题、图片直链、缩略图（如有）、来源页、尺寸与后端名；
+- 触发：用户说“找图 / 配图 / 图片素材 / 搜图片 / find pictures / image assets”等时，MCP 客户端会根据工具描述自动选择；也可以显式说“用 `search_images` 搜……”。
+
+### 支持图片检索的后端
+
+| 后端 | 调用方式 | 环境变量 | 返回内容 |
+|---|---|---|---|
+| Serper | `POST /images` | `AETHER_SERPER_API_KEY` | `imageUrl` / `thumbnailUrl` / `link` / 宽高 |
+| Brave | `GET /images/search` | `AETHER_BRAVE_API_KEY` | 原图 `properties.url` / 缩略图 / 宿主页 |
+| Parallel | `POST /v1/images/search` | `AETHER_PARALLEL_API_KEY` | `image_url` / `source_page_url` / 宽高 |
+| Tavily | `POST /search` + `include_images` | `AETHER_TAVILY_API_KEY` | `images[].url` / `description` |
+| Firecrawl | `POST /search` + `sources:["images"]` | `AETHER_FIRECRAWL_API_KEY` | `imageUrl` / 来源页 / 宽高；支持 `imagesize:`、`larger:` 等尺寸操作符 |
+| Linkup | `POST /search` + `includeImages` | `AETHER_LINKUP_API_KEY` | `type:"image"` 的 `name` / `url` |
+
+配置任意一个 key 即自动启用对应后端；配置多个则并行扇出，未配置的后端静默跳过。
+
+> Exa 的 `contents.extras.imageLinks` 属于网页配图抽取，不是图片搜索，本项目未接入；You.com / DeepSeek / Sonar / Grok 不提供图片检索能力。
+
+> `search_images` 会使用所有已配置的图片后端，包括 `AETHER_FALLBACK_BACKENDS` 中指定的后端；它是显式调用的独立工具，不参与主层 / 补充层划分。
+
+> 图片检索只返回图片 URL 与元数据，不下载图片、不做 OCR 或内容识别。
 
 ## 局限
 
@@ -184,7 +219,8 @@ PYTHONPATH=src python -m aether_search.server
 - 经第三方中转的 Grok 端点可能返回空正文；多端点容错可配置备用端点。
 - 按量付费或配额受限后端可经 `AETHER_FALLBACK_BACKENDS` 归入补充层，避免每次 `search` 消耗。
 - 核验只覆盖链接重合与可达性，不判定引用内容的真伪。
-- 测试范围：Grok 通道含离线单元 / 回归测试与进程内 MCP 集成测试；DeepSeek 覆盖搜索、抓取降级、Agent 独立运行及工具调用历史。不等于所有后端或检索质量均已验证。
+- 图片检索只返回图片 URL 与元数据，不下载图片、不做 OCR 或内容识别；支持的后端与限制见上文“图片搜索”。
+- 测试范围：Grok 通道含离线单元 / 回归测试与进程内 MCP 集成测试；DeepSeek 覆盖搜索、抓取降级、Agent 独立运行及工具调用历史；图片检索覆盖六个后端解析、去重合并与工具入口。不等于所有后端或检索质量均已验证。
 
 ## 开发与测试
 
@@ -195,6 +231,7 @@ PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_g
 PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_grok_protocol.py' -v
 PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_grok_integration.py' -v
 PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_deepseek.py' -v
+PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_images.py' -v
 ```
 
 ## 相关文档

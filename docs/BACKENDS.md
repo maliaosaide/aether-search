@@ -24,6 +24,23 @@
 
 > **免费额度排名**（建议优先配置顺序）：You.com $100 ≫ Parallel 5,000/月 > Linkup 4,000（一次性）> Serper 2,500 > Exa $10/月（≈1.4k Search）> Tavily 1,000/月 ≈ Firecrawl 1,000/月 ≈ Brave $5/月 > Sonar（无）。
 
+### 图片检索支持
+
+`search_images` 只向支持图片的后端发请求，未配置 key 的自动跳过：
+
+| 后端 | 调用方式 | 返回字段 |
+|---|---|---|
+| Serper | `POST /images` | `imageUrl` / `thumbnailUrl` / `link` / `imageWidth` / `imageHeight` |
+| Brave | `GET /images/search` | `properties.url`（原图）/ `thumbnail.src` / 来源页 `url` |
+| Parallel | `POST /v1/images/search` | `image_url` / `source_page_url` / `width` / `height` |
+| Tavily | `POST /search` + `include_images` | `images[].url` / `description` |
+| Firecrawl | `POST /search` + `sources:["images"]` | `imageUrl` / `url` / `imageWidth` / `imageHeight` |
+| Linkup | `POST /search` + `includeImages` | `type=image` 的 `name` / `url` |
+
+Exa 的 `contents.extras.imageLinks` 属于网页配图抽取，不属于图片搜索，本项目未接入；You.com / DeepSeek / Sonar / Grok 无图片检索。
+
+`search_images` 会扇出**所有已配置的图片后端**，包括被 `AETHER_FALLBACK_BACKENDS` 指定为补充层的后端——它是显式调用的独立工具，不走主层/补充层划分。若不希望某后端在图片检索时消耗额度，请不要配置其 key。
+
 ---
 
 ## 二、各后端详情

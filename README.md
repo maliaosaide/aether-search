@@ -10,10 +10,11 @@
   <strong>English</strong> | <a href="README_CN.md">简体中文</a>
 </p>
 
-aether-search is an MCP search server built on [FastMCP](https://github.com/jlowin/fastmcp), providing web search tools for MCP clients (Claude Code, Cherry Studio, etc.). A single `search` call **runs the configured and available channels in parallel**:
+aether-search is an MCP search server built on [FastMCP](https://github.com/jlowin/fastmcp), providing web search and image search tools for MCP clients (Claude Code, Cherry Studio, etc.). A single `search` call **runs the configured and available channels in parallel**:
 
 - **Grok channel**: calls LLM web search via OpenAI-compatible / xAI / CPA endpoints and produces a cited model answer;
-- **Agent channel**: fans out across multiple search API backends (10 optional), fuses and deduplicates results with RRF into an evidence pool; when an Aux LLM is configured it further produces a cited answer through tool calling, otherwise it returns evidence links directly.
+- **Agent channel**: fans out across multiple search API backends (10 optional), fuses and deduplicates results with RRF into an evidence pool; when an Aux LLM is configured it further produces a cited answer through tool calling, otherwise it returns evidence links directly;
+- **Image search**: an independent `search_images` tool fans out to configured image backends and returns direct image URLs, thumbnails, source pages and dimensions.
 
 The two result sets are cross-corroborated by URL and probed for dead links, then assembled into a single response. The three configuration dimensions (Grok endpoint / search backends / Aux LLM) are independent — each enabled one runs, unset ones are skipped; at minimum configure a Grok endpoint or one primary-layer search backend (the Agent channel stays disabled if every configured backend is assigned to the supplementary layer).
 
@@ -28,6 +29,7 @@ The two result sets are cross-corroborated by URL and probed for dead links, the
 - **Assembly**: if Grok has body text, Grok is primary with the Agent's retrieved evidence attached; if Grok's body is empty, the agent takes over; if both fail, evidence links serve as fallback; if nothing is configured, a configuration error is returned.
 - **Source cache**: all sources (citations + evidence) of each search are deduplicated into a session cache, and a `session_id` is returned that `get_sources` can retrieve.
 - **Backend layering**: by default every configured backend joins the primary layer for the `search` fan-out; the supplementary layer named by `AETHER_FALLBACK_BACKENDS` (e.g. `sonar,linkup`) stays out of the default fan-out and is invoked only explicitly by `search_deep` — `search` never cascades to the supplementary layer automatically; when primary results are scarce it only prints a hint, and whether to call `search_deep` is decided by the caller.
+- **Image search**: `search_images` is independent of the dual channels; it fans out to every configured image-capable backend (Serper / Brave / Parallel / Tavily / Firecrawl / Linkup), deduplicates by URL, round-robin merges, and returns direct image URLs, thumbnails, source pages and dimensions.
 
 ## Search Backend Pricing & Quotas
 
@@ -170,11 +172,44 @@ Full field list in [`.env.example`](.env.example) (one-to-one with `config.py`).
 |---|---|
 | `search(query, platform="", sources_mode="inline")` | Dual-channel parallel search (primary-backend fan-out); with `sources_mode="session"` the body keeps only the answer and verification block, sources are fetched via `get_sources` |
 | `search_deep(query, platform="")` | Supplementary-layer retrieval (backends named by `AETHER_FALLBACK_BACKENDS`); called by the upper layer based on the sparse-results hint from `search` |
+| `search_images(query, count=10)` | Image search across configured Serper / Brave / Parallel / Tavily / Firecrawl / Linkup backends; deduplicated and round-robin merged, returning direct image URLs, thumbnails, source pages and dimensions |
 | `get_sources(session_id)` | Retrieve all sources of a given session (with ✓ ⚠ ? verification marks) |
 | `web_fetch(url)` | Fetch a single page as Markdown (DeepSeek Fetch → Tavily Extract → Firecrawl Scrape fallback) |
 | `web_map(url, ...)` | Site structure mapping (Tavily Map) |
 | `toggle_builtin_tools(action)` | Toggle Claude's built-in WebSearch / WebFetch in the caller project's `.claude/settings.json` (`on` / `off` / `status`) |
 | `get_config()` | Configuration status (keys masked) + per-endpoint `/models` connectivity diagnostics |
+
+## Image Search
+
+`search_images` is independent of the Grok / Agent channels. It fans out to every configured image backend in parallel, deduplicates by image URL, and round-robin merges the results.
+
+```text
+search_images(query: str, count: int = 10) -> Markdown
+```
+
+- `query`: what the images should depict, e.g. `"NVIDIA B300 GPU"` or `"golden gate bridge sunset"`;
+- `count`: maximum number of merged results to return (1–50, default 10); each backend is asked for up to `count` entries before deduplication;
+- Returns: title, direct image URL, thumbnail (if available), source page, dimensions and backend name;
+- Trigger: when the user asks to find / show / look up pictures, photos, illustrations, logos, wallpapers or image assets, the MCP client selects this tool from its description; it can also be invoked explicitly as `search_images`.
+
+### Image-capable backends
+
+| Backend | Request | Environment variable | Returns |
+|---|---|---|---|
+| Serper | `POST /images` | `AETHER_SERPER_API_KEY` | `imageUrl` / `thumbnailUrl` / `link` / dimensions |
+| Brave | `GET /images/search` | `AETHER_BRAVE_API_KEY` | original `properties.url` / thumbnail / hosting page |
+| Parallel | `POST /v1/images/search` | `AETHER_PARALLEL_API_KEY` | `image_url` / `source_page_url` / dimensions |
+| Tavily | `POST /search` + `include_images` | `AETHER_TAVILY_API_KEY` | `images[].url` / `description` |
+| Firecrawl | `POST /search` + `sources:["images"]` | `AETHER_FIRECRAWL_API_KEY` | `imageUrl` / source page / dimensions; supports `imagesize:` and `larger:` operators |
+| Linkup | `POST /search` + `includeImages` | `AETHER_LINKUP_API_KEY` | `type:"image"` entries with `name` / `url` |
+
+Configuring any one key enables that backend automatically; multiple configured backends fan out in parallel, while unset ones are silently skipped.
+
+> Exa's `contents.extras.imageLinks` is page-image extraction, not image search, and is not wired in this project; You.com / DeepSeek / Sonar / Grok provide no image search capability.
+
+> `search_images` uses every configured image backend, including backends named in `AETHER_FALLBACK_BACKENDS`; it is an explicitly invoked standalone tool and does not participate in the primary / supplementary layer split.
+
+> Image search returns URLs and metadata only; it does not download images or run OCR / content recognition.
 
 ## Limitations
 
@@ -184,7 +219,8 @@ Full field list in [`.env.example`](.env.example) (one-to-one with `config.py`).
 - Grok endpoints behind third-party relays may return empty bodies; multi-endpoint failover allows configuring backup endpoints.
 - Metered or quota-limited backends can be moved to the supplementary layer via `AETHER_FALLBACK_BACKENDS` to avoid consumption on every `search`.
 - Verification covers only link overlap and reachability, not the truth of cited content.
-- Test scope: Grok has offline unit / regression and in-process MCP integration tests; DeepSeek covers search, fetch fallback, Agent-only operation, and tool-call history. This does not mean every backend or retrieval quality is verified.
+- Image search returns image URLs and metadata only; it does not download images or run OCR / content recognition. See the "Image Search" section above for supported backends and limits.
+- Test scope: Grok has offline unit / regression and in-process MCP integration tests; DeepSeek covers search, fetch fallback, Agent-only operation, and tool-call history; image search covers parsing for all six backends, dedup/merge, and the tool entrypoint. This does not mean every backend or retrieval quality is verified.
 
 ## Development & Testing
 
@@ -195,6 +231,7 @@ PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_g
 PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_grok_protocol.py' -v
 PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_grok_integration.py' -v
 PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_deepseek.py' -v
+PYTHONPATH=src .venv/Scripts/python.exe -m unittest discover -s tests -p 'test_images.py' -v
 ```
 
 ## Related Documentation

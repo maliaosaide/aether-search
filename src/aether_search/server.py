@@ -20,7 +20,8 @@ from fastmcp import FastMCP
 from . import fetcher
 from .channels import AgentChannel, GrokChannel
 from .config import mask_key, settings
-from .connectors.base import Source
+from .connectors.base import ImageResult, ImageSearchResult, Source
+from .grok_protocol import markdown_safe_url
 from .sources import SourcesCache, merge_sources, new_session_id, source_to_dict, split_answer_and_sources
 from .verify import DEAD, extract_urls, mark, probe_urls, verify_urls
 
@@ -66,6 +67,24 @@ def _merge_verdicts(verdicts: dict[str, dict]) -> dict:
     for v in verdicts.values():
         if isinstance(v, dict):
             merged.update(v)
+    return merged
+
+
+def _merge_images(results: list[ImageSearchResult], limit: int) -> list[ImageResult]:
+    """Round-robin merge so no single backend dominates, deduped by image URL."""
+    queues = [list(r.images) for r in results if r.images]
+    merged: list[ImageResult] = []
+    seen: set[str] = set()
+    while len(merged) < limit and any(queues):
+        for queue in queues:
+            while queue:
+                image = queue.pop(0)
+                if isinstance(image.image_url, str) and image.image_url and image.image_url not in seen:
+                    seen.add(image.image_url)
+                    merged.append(image)
+                    break
+            if len(merged) >= limit:
+                break
     return merged
 
 
@@ -201,6 +220,75 @@ async def search_deep(query: str, platform: str = "") -> str:
 
 
 @mcp.tool()
+async def search_images(query: str, count: int = 10) -> str:
+    """Search the web for images across every configured image-capable backend
+    (serper/brave/parallel/tavily/firecrawl/linkup). Returns direct image URLs with
+    titles, source pages and dimensions, round-robin merged and deduplicated.
+
+    Use this when the user asks to find, show, collect or look up pictures, photos,
+    illustrations, logos, wallpapers or image assets (Chinese triggers: 找图 / 配图 /
+    图片素材 / 搜图片). Do not use it to read or describe an image that already has
+    a known URL.
+
+    Args:
+        query: What the images should depict, e.g. "golden gate bridge at sunset".
+        count: Maximum number of merged results to return (1-50, default 10). Each
+            configured backend is asked for up to this many before deduplication.
+    """
+    query = query.strip()
+    if not query:
+        return "Error: query 不能为空。"
+    from .connectors import active_connectors
+    connectors = [c for c in active_connectors() if c.supports_images]
+    if not connectors:
+        return ("Error: 未配置支持图片检索的后端。配置以下任一 key 即可："
+                "AETHER_SERPER_API_KEY / AETHER_BRAVE_API_KEY / AETHER_PARALLEL_API_KEY / "
+                "AETHER_TAVILY_API_KEY / AETHER_FIRECRAWL_API_KEY / AETHER_LINKUP_API_KEY。")
+
+    count = max(1, min(count, 50))
+    sem = asyncio.Semaphore(max(1, settings.max_concurrency))
+
+    async def _run(connector):
+        async with sem:
+            return await connector.search_images(query, count)
+
+    raw = await asyncio.gather(*(_run(c) for c in connectors), return_exceptions=True)
+    results = [
+        r if isinstance(r, ImageSearchResult)
+        else ImageSearchResult(images=[], query=query, connector_name=c.name, error=str(r))
+        for c, r in zip(connectors, raw)
+    ]
+    images = _merge_images(results, count)
+    if not images:
+        errors = " | ".join(f"{r.connector_name}: {r.error}" for r in results if r.error)
+        return f"> 未找到图片。错误: {errors}" if errors else "> 未找到图片。"
+
+    lines = [f"## 图片搜索结果：{query}\n"]
+    for i, img in enumerate(images, 1):
+        raw_title = img.title if isinstance(img.title, str) else ""
+        description = img.description if isinstance(img.description, str) else ""
+        title = " ".join((raw_title or description[:80] or "image").split())
+        title = title.replace("[", "(").replace("]", ")")
+        meta = [f"`{img.connector}`"]
+        if img.width and img.height:
+            meta.append(f"{img.width}×{img.height}")
+        if isinstance(img.source_url, str) and img.source_url:
+            meta.append(f"[来源页]({markdown_safe_url(img.source_url)})")
+        lines.append(f"{i}. **{title}** {' · '.join(meta)}")
+        lines.append(f"   ![{title}]({markdown_safe_url(img.image_url)})")
+        lines.append(f"   {img.image_url}")
+        if isinstance(img.thumbnail_url, str) and img.thumbnail_url and img.thumbnail_url != img.image_url:
+            lines.append(f"   缩略图: {img.thumbnail_url}")
+    lines.append("\n---")
+    lines.append("*backends: " + ", ".join(
+        f"{r.connector_name}({len(r.images)})" for r in results) + "*")
+    errors = [f"{r.connector_name}: {r.error}" for r in results if r.error]
+    if errors:
+        lines.append("*errors: " + " | ".join(errors) + "*")
+    return "\n".join(lines)
+
+
+@mcp.tool()
 async def get_sources(session_id: str) -> str:
     """Retrieve all cached sources (with verify marks) for a previous search call."""
     sources = await _SOURCES_CACHE.get(session_id)
@@ -298,6 +386,7 @@ async def get_config() -> str:
         f"aux LLM: base={settings.llm_api_base or '(default OpenAI)'} model={settings.llm_model or '(not set)'} "
         f"key={mask_key(settings.llm_api_key)}",
         f"aux backends: {', '.join(c.name for c in agent.connectors) or '(none)'}",
+        f"image backends: {', '.join(c.name for c in agent.connectors if c.supports_images) or '(none)'}",
         f"fanout={settings.fanout} variants={settings.max_variants} top_k={settings.top_k} "
         f"concurrency={settings.max_concurrency} verify={settings.verify}",
         f"agent: max_steps={settings.agent_max_steps} timeout={settings.agent_timeout}s "
